@@ -79,13 +79,29 @@ export function MapView() {
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    // 限制最大绘制缓冲区，防止过大导致性能问题或布局溢出
+    const maxWidth = 4000;
+    const maxHeight = 3000;
+    canvas.width = Math.min(rect.width, maxWidth);
+    canvas.height = Math.min(rect.height, maxHeight);
 
+    // 先重置变换，清除整个画布
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 应用视口变换
     ctx.save();
     ctx.translate(viewport.x, viewport.y);
     ctx.scale(viewport.zoom, viewport.zoom);
+
+    // 绘制可视区域背景（防止透明区域）
+    ctx.fillStyle = 'var(--color-bg-secondary)';
+    ctx.fillRect(
+      -viewport.x / viewport.zoom - 1,
+      -viewport.y / viewport.zoom - 1,
+      canvas.width / viewport.zoom + 2,
+      canvas.height / viewport.zoom + 2
+    );
 
     // Draw grid
     drawGrid(ctx, canvas.width, canvas.height, viewport);
