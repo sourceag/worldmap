@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { generateId } from '../utils/id';
 import { worldForgeAPI } from '../core/WorldForgeAPI';
+import { saveWorldData, loadWorldData } from '../core/Storage';
 
 interface WorldState {
   // 数据
@@ -37,6 +38,12 @@ interface WorldState {
   selectedEntityType: string | null;
   selectedEntityId: ID | null;
   currentTimePoint: number | null; // 用于时间线视图
+
+  // 持久化
+  saveToStorage: () => void;
+  loadFromStorage: () => Promise<boolean>;
+  cascadeDeleteContinent: (id: ID) => void;
+  cascadeDeleteRegion: (id: ID) => void;
 
   // World 操作
   createWorld: (name: string, description?: string) => World;
@@ -361,12 +368,12 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   },
 
   // === UI ===
-  setActiveView: (view) => set({ activeView: view }),
-  selectEntity: (entityType, entityId) => set({ selectedEntityType: entityType, selectedEntityId: entityId }),
-  setCurrentTimePoint: (time) => set({ currentTimePoint: time }),
+  setActiveView: (view: WorldState['activeView']) => set({ activeView: view }),
+  selectEntity: (entityType: string | null, entityId: ID | null) => set({ selectedEntityType: entityType, selectedEntityId: entityId }),
+  setCurrentTimePoint: (time: number | null) => set({ currentTimePoint: time }),
 
   // === 工具 ===
-  getEntityById: (type, id) => {
+  getEntityById: (type: string, id: ID) => {
     const state = get();
     const collection: Record<string, Array<{ id: string }>> = {
       continent: state.continents,
@@ -382,5 +389,66 @@ export const useWorldStore = create<WorldState>((set, get) => ({
     const items = collection[type];
     if (!items) return null;
     return items.find((item) => item.id === id) ?? null;
+  },
+
+  // === 持久化 ===
+  saveToStorage: () => {
+    const state = get();
+    saveWorldData({
+      world: state.world,
+      continents: state.continents,
+      regions: state.regions,
+      locations: state.locations,
+      routes: state.routes,
+      eras: state.eras,
+      ages: state.ages,
+      events: state.events,
+      factions: state.factions,
+      characters: state.characters,
+    });
+  },
+
+  loadFromStorage: async () => {
+    const data = await loadWorldData();
+    if (data) {
+      set({
+        world: data.world,
+        continents: data.continents || [],
+        regions: data.regions || [],
+        locations: data.locations || [],
+        routes: data.routes || [],
+        eras: data.eras || [],
+        ages: data.ages || [],
+        events: data.events || [],
+        factions: data.factions || [],
+        characters: data.characters || [],
+      });
+      return true;
+    }
+    return false;
+  },
+
+  // 级联删除：删除大陆时删除其下属区域和地点
+  cascadeDeleteContinent: (id: ID) => {
+    const state = get();
+    const regionIds = state.regions
+      .filter((r) => r.continentId === id)
+      .map((r) => r.id);
+    
+    set((s) => ({
+      continents: s.continents.filter((c) => c.id !== id),
+      regions: s.regions.filter((r) => r.continentId !== id),
+      locations: s.locations.filter((l) => !regionIds.includes(l.regionId)),
+    }));
+    worldForgeAPI.emitEntityEvent('entity:deleted', 'continent', id, null);
+  },
+
+  // 级联删除：删除区域时删除其下属地点
+  cascadeDeleteRegion: (id: ID) => {
+    set((s) => ({
+      regions: s.regions.filter((r) => r.id !== id),
+      locations: s.locations.filter((l) => l.regionId !== id),
+    }));
+    worldForgeAPI.emitEntityEvent('entity:deleted', 'region', id, null);
   },
 }));

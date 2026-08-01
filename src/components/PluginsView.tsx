@@ -5,6 +5,8 @@
 import { useState, useEffect } from 'react';
 import { pluginManager } from '../core/PluginManager';
 import { worldForgeAPI } from '../core/WorldForgeAPI';
+import { useWorldStore } from '../store/worldStore';
+import { downloadFile, downloadJSON, downloadMarkdown } from '../utils/download';
 import type { PluginManifest } from '../types';
 import '../App.css';
 
@@ -14,6 +16,7 @@ export function PluginsView() {
   const [exportFormat, setExportFormat] = useState<string>('markdown');
   const [exportResult, setExportResult] = useState<string>('');
   const [availableExporters, setAvailableExporters] = useState<string[]>([]);
+  const { world } = useWorldStore();
 
   useEffect(() => {
     setPlugins(pluginManager.getAllPlugins());
@@ -29,10 +32,27 @@ export function PluginsView() {
     setPlugins([...pluginManager.getAllPlugins()]);
   };
 
-  const handleExport = async () => {
+  const handleExport = async (download: boolean = false) => {
     try {
       const result = await worldForgeAPI.export(exportFormat, { format: 'pretty' });
-      setExportResult(typeof result === 'string' ? result : '导出完成');
+      const content = typeof result === 'string' ? result : String(result);
+      
+      if (download) {
+        // Trigger file download
+        const worldName = world?.name || 'world';
+        const timestamp = new Date().toISOString().slice(0, 10);
+        
+        if (exportFormat === 'json') {
+          downloadJSON(JSON.parse(content), `${worldName}-${timestamp}.json`);
+        } else if (exportFormat === 'markdown') {
+          downloadMarkdown(content, `${worldName}-${timestamp}.md`);
+        } else {
+          downloadFile(content, `${worldName}-${timestamp}.${exportFormat}`);
+        }
+        setExportResult('✅ 文件已下载');
+      } else {
+        setExportResult(content);
+      }
     } catch (error) {
       setExportResult(`导出失败: ${(error as Error).message}`);
     }
@@ -60,8 +80,11 @@ export function PluginsView() {
               </option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={handleExport}>
-            📥 导出
+          <button className="btn btn-secondary" onClick={() => handleExport(false)}>
+            👁️ 预览
+          </button>
+          <button className="btn btn-primary" onClick={() => handleExport(true)}>
+            📥 下载文件
           </button>
         </div>
         {exportResult && (
@@ -80,6 +103,34 @@ export function PluginsView() {
             {exportResult}
           </div>
         )}
+      </div>
+
+      {/* Data Management */}
+      <div style={{ marginBottom: '32px' }}>
+        <h3 style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
+          数据管理
+        </h3>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => useWorldStore.getState().saveToStorage()}
+          >
+            💾 立即保存
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              if (confirm('确定要清除所有数据吗？此操作不可恢复！')) {
+                localStorage.location.reload();
+              }
+            }}
+          >
+            🗑️ 清除数据
+          </button>
+        </div>
+        <p style={{ fontSize: '12px', opacity: 0.6, marginTop: '8px' }}>
+          数据自动保存到浏览器本地存储（IndexedDB）
+        </p>
       </div>
 
       {/* Plugin List */}

@@ -21,13 +21,75 @@ export function PropertiesPanel() {
     updateFaction,
     updateEvent,
     updateCharacter,
-    deleteContinent,
-    deleteRegion,
+    cascadeDeleteContinent,
+    cascadeDeleteRegion,
     deleteLocation,
     deleteFaction,
     deleteEvent,
     deleteCharacter,
   } = useWorldStore();
+
+  // These are used in handleDelete
+  void cascadeDeleteContinent;
+  void cascadeDeleteRegion;
+  void deleteLocation;
+  void deleteFaction;
+  void deleteEvent;
+  void deleteCharacter;
+
+  const handleDelete = () => {
+    if (!selectedEntityType || !selectedEntityId) return;
+    
+    const entityName = getEntityName(selectedEntityType, selectedEntityId);
+    const message = selectedEntityType === 'continent'
+      ? `确定要删除大陆"${entityName}"吗？下属的区域和地点也会被删除。`
+      : selectedEntityType === 'region'
+      ? `确定要删除区域"${entityName}"吗？下属的地点也会被删除。`
+      : `确定要删除${getEntityTypeName(selectedEntityType)}"${entityName}"吗？`;
+
+    if (!confirm(message)) return;
+
+    switch (selectedEntityType) {
+      case 'continent':
+        cascadeDeleteContinent(selectedEntityId);
+        break;
+      case 'region':
+        cascadeDeleteRegion(selectedEntityId);
+        break;
+      case 'location':
+        deleteLocation(selectedEntityId);
+        break;
+      case 'faction':
+        deleteFaction(selectedEntityId);
+        break;
+      case 'event':
+        deleteEvent(selectedEntityId);
+        break;
+      case 'character':
+        deleteCharacter(selectedEntityId);
+        break;
+    }
+  };
+
+  const getEntityName = (type: string, id: string): string => {
+    const entity = useWorldStore.getState().getEntityById(type, id);
+    return (entity as { name?: string })?.name || '(未知)';
+  };
+
+  const getEntityTypeName = (type: string): string => {
+    const names: Record<string, string> = {
+      continent: '大陆',
+      region: '区域',
+      location: '地点',
+      route: '路线',
+      era: '纪元',
+      age: '时代',
+      event: '事件',
+      faction: '势力',
+      character: '人物',
+    };
+    return names[type] || type;
+  };
 
   if (!selectedEntityType || !selectedEntityId) {
     return (
@@ -75,7 +137,7 @@ export function PropertiesPanel() {
                 placeholder="如：温带、热带..."
               />
             </div>
-            <button className="btn btn-danger" onClick={() => deleteContinent(continent.id)}>
+            <button className="btn btn-danger" onClick={handleDelete}>
               删除大陆
             </button>
           </div>
@@ -129,7 +191,7 @@ export function PropertiesPanel() {
                 onChange={(e) => updateRegion(region.id, { resources: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
               />
             </div>
-            <button className="btn btn-danger" onClick={() => deleteRegion(region.id)}>
+            <button className="btn btn-danger" onClick={handleDelete}>
               删除区域
             </button>
           </div>
@@ -193,7 +255,7 @@ export function PropertiesPanel() {
                 onChange={(e) => updateLocation(location.id, { aliases: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
               />
             </div>
-            <button className="btn btn-danger" onClick={() => deleteLocation(location.id)}>
+            <button className="btn btn-danger" onClick={handleDelete}>
               删除地点
             </button>
           </div>
@@ -258,7 +320,7 @@ export function PropertiesPanel() {
                 onChange={(e) => updateFaction(faction.id, { economyLevel: parseInt(e.target.value) || 5 })}
               />
             </div>
-            <button className="btn btn-danger" onClick={() => deleteFaction(faction.id)}>
+            <button className="btn btn-danger" onClick={handleDelete}>
               删除势力
             </button>
           </div>
@@ -305,7 +367,7 @@ export function PropertiesPanel() {
                 onChange={(e) => updateEvent(event.id, { description: e.target.value })}
               />
             </div>
-            <button className="btn btn-danger" onClick={() => deleteEvent(event.id)}>
+            <button className="btn btn-danger" onClick={handleDelete}>
               删除事件
             </button>
           </div>
@@ -340,7 +402,7 @@ export function PropertiesPanel() {
                 onChange={(e) => updateCharacter(character.id, { description: e.target.value })}
               />
             </div>
-            <button className="btn btn-danger" onClick={() => deleteCharacter(character.id)}>
+            <button className="btn btn-danger" onClick={handleDelete}>
               删除人物
             </button>
           </div>

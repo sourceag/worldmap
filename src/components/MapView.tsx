@@ -34,6 +34,12 @@ export function MapView() {
     createLocation,
     updateContinent,
     updateRegion,
+    cascadeDeleteContinent,
+    cascadeDeleteRegion,
+    deleteLocation,
+    deleteFaction,
+    deleteEvent,
+    deleteCharacter,
   } = useWorldStore();
 
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
@@ -405,16 +411,43 @@ export function MapView() {
   };
 
   const handleDeleteSelected = () => {
-    if (!selectedEntityId) return;
-    if (selectedEntityType === 'continent') {
-      if (confirm('确定要删除这个大陆吗？')) {
-        // Need to add deleteContinent to store
-      }
-    } else if (selectedEntityType === 'region') {
-      if (confirm('确定要删除这个区域吗？')) {
-        // Need to add deleteRegion to store
-      }
+    if (!selectedEntityId || !selectedEntityType) return;
+    
+    const entityName = getEntityName(selectedEntityType, selectedEntityId);
+    const message = selectedEntityType === 'continent'
+      ? `确定要删除大陆"${entityName}"吗？下属的区域和地点也会被删除。`
+      : selectedEntityType === 'region'
+      ? `确定要删除区域"${entityName}"吗？下属的地点也会被删除。`
+      : `确定要删除"${entityName}"吗？`;
+
+    if (!confirm(message)) return;
+
+    switch (selectedEntityType) {
+      case 'continent':
+        cascadeDeleteContinent(selectedEntityId);
+        break;
+      case 'region':
+        cascadeDeleteRegion(selectedEntityId);
+        break;
+      case 'location':
+        deleteLocation(selectedEntityId);
+        break;
+      case 'faction':
+        deleteFaction(selectedEntityId);
+        break;
+      case 'event':
+        deleteEvent(selectedEntityId);
+        break;
+      case 'character':
+        deleteCharacter(selectedEntityId);
+        break;
     }
+    selectEntity(null, null);
+  };
+
+  const getEntityName = (type: string, id: string): string => {
+    const entity = useWorldStore.getState().getEntityById(type, id);
+    return (entity as { name?: string })?.name || '(未知)';
   };
 
   return (
