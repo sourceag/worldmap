@@ -51,6 +51,7 @@ export function MapView() {
   const [polygonEdit, setPolygonEdit] = useState<PolygonEditState | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogData, setDialogData] = useState({ name: '', description: '', terrain: 'plains' as TerrainType });
+  const [zoomSpeed, setZoomSpeed] = useState<number>(0.005); // 缩放速度：0.001(慢) ~ 0.02(快)
 
   // Convert screen coordinates to world coordinates
   const screenToWorld = useCallback((clientX: number, clientY: number) => {
@@ -212,8 +213,13 @@ export function MapView() {
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setViewport((v) => ({ ...v, zoom: Math.max(0.1, Math.min(5, v.zoom * delta)) }));
+    // 基于 deltaY 的幅度计算缩放量，使缩放更平滑
+    const delta = -e.deltaY * zoomSpeed;
+    const factor = Math.exp(delta); // 使用指数缩放，更自然
+    setViewport((v) => ({
+      ...v,
+      zoom: Math.max(0.1, Math.min(10, v.zoom * factor))
+    }));
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -510,9 +516,24 @@ export function MapView() {
         <button onClick={() => setViewport({ x: 0, y: 0, zoom: 1 })}>
           🔄 重置
         </button>
-        <span style={{ marginLeft: 'auto', fontSize: '12px', opacity: 0.6 }}>
-          缩放: {Math.round(viewport.zoom * 100)}%
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+          <span style={{ fontSize: '12px', opacity: 0.6 }}>
+            缩放: {Math.round(viewport.zoom * 100)}%
+          </span>
+          <select
+            className="form-input"
+            style={{ width: '70px', padding: '2px 6px', fontSize: '11px' }}
+            value={zoomSpeed}
+            onChange={(e) => setZoomSpeed(parseFloat(e.target.value))}
+            title="滚轮缩放速度"
+          >
+            <option value="0.002">极慢</option>
+            <option value="0.005">慢速</option>
+            <option value="0.01">正常</option>
+            <option value="0.02">快速</option>
+            <option value="0.04">极快</option>
+          </select>
+        </div>
       </div>
 
       {/* Drawing hint */}
