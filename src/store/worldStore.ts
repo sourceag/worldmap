@@ -19,6 +19,7 @@ import type {
 import { generateId } from '../utils/id';
 import { worldForgeAPI } from '../core/WorldForgeAPI';
 import { saveWorldData, loadWorldData } from '../core/Storage';
+import { historyManager, createSnapshot, restoreSnapshot, type ActionType } from '../core/History';
 
 interface WorldState {
   // 数据
@@ -44,6 +45,15 @@ interface WorldState {
   loadFromStorage: () => Promise<boolean>;
   cascadeDeleteContinent: (id: ID) => void;
   cascadeDeleteRegion: (id: ID) => void;
+
+  // 撤销/重做
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  getUndoDescription: () => string | null;
+  getRedoDescription: () => string | null;
+  _pushHistory: (action: ActionType, description: string, before: ReturnType<typeof createSnapshot>) => void;
 
   // World 操作
   createWorld: (name: string, description?: string) => World;
@@ -144,6 +154,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   createContinent: (data) => {
     const { world } = get();
     if (!world) throw new Error('No world created yet');
+    const before = createSnapshot(get());
     const continent: Continent = {
       ...data,
       id: generateId(),
@@ -151,70 +162,93 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ continents: [...state.continents, continent] }));
+    get()._pushHistory('create-continent', `创建大陆"${continent.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'continent', continent.id, continent);
     return continent;
   },
 
   updateContinent: (id, updates) => {
+    const before = createSnapshot(get());
+    const entityName = (get().continents.find(c => c.id === id) as Continent)?.name || '(未知)';
     set((state) => ({
       continents: state.continents.map((c) => c.id === id ? { ...c, ...updates } : c),
     }));
+    get()._pushHistory('update-continent', `编辑大陆"${entityName}"`, before);
     const updated = get().continents.find(c => c.id === id);
     if (updated) worldForgeAPI.emitEntityEvent('entity:updated', 'continent', id, updated);
   },
 
   deleteContinent: (id) => {
+    const before = createSnapshot(get());
+    const entityName = (get().continents.find(c => c.id === id) as Continent)?.name || '(未知)';
     set((state) => ({ continents: state.continents.filter((c) => c.id !== id) }));
+    get()._pushHistory('delete-continent', `删除大陆"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'continent', id, null);
   },
 
   // === Region ===
   createRegion: (data) => {
+    const before = createSnapshot(get());
     const region: Region = {
       ...data,
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ regions: [...state.regions, region] }));
+    get()._pushHistory('create-region', `创建区域"${region.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'region', region.id, region);
     return region;
   },
 
   updateRegion: (id, updates) => {
+    const before = createSnapshot(get());
+    const entityName = (get().regions.find(r => r.id === id) as Region)?.name || '(未知)';
     set((state) => ({
       regions: state.regions.map((r) => r.id === id ? { ...r, ...updates } : r),
     }));
+    get()._pushHistory('update-region', `编辑区域"${entityName}"`, before);
     const updated = get().regions.find(r => r.id === id);
     if (updated) worldForgeAPI.emitEntityEvent('entity:updated', 'region', id, updated);
   },
 
   deleteRegion: (id) => {
+    const before = createSnapshot(get());
+    const entityName = (get().regions.find(r => r.id === id) as Region)?.name || '(未知)';
     set((state) => ({ regions: state.regions.filter((r) => r.id !== id) }));
+    get()._pushHistory('delete-region', `删除区域"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'region', id, null);
   },
 
   // === Location ===
   createLocation: (data) => {
+    const before = createSnapshot(get());
     const location: Location = {
       ...data,
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ locations: [...state.locations, location] }));
+    get()._pushHistory('create-location', `创建地点"${location.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'location', location.id, location);
     return location;
   },
 
   updateLocation: (id, updates) => {
+    const before = createSnapshot(get());
+    const entityName = (get().locations.find(l => l.id === id) as Location)?.name || '(未知)';
     set((state) => ({
       locations: state.locations.map((l) => l.id === id ? { ...l, ...updates } : l),
     }));
+    get()._pushHistory('update-location', `编辑地点"${entityName}"`, before);
     const updated = get().locations.find(l => l.id === id);
     if (updated) worldForgeAPI.emitEntityEvent('entity:updated', 'location', id, updated);
   },
 
   deleteLocation: (id) => {
+    const before = createSnapshot(get());
+    const entityName = (get().locations.find(l => l.id === id) as Location)?.name || '(未知)';
     set((state) => ({ locations: state.locations.filter((l) => l.id !== id) }));
+    get()._pushHistory('delete-location', `删除地点"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'location', id, null);
   },
 
@@ -287,6 +321,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   createEvent: (data) => {
     const { world } = get();
     if (!world) throw new Error('No world created yet');
+    const before = createSnapshot(get());
     const event: WorldEvent = {
       ...data,
       id: generateId(),
@@ -294,20 +329,27 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ events: [...state.events, event] }));
+    get()._pushHistory('create-event', `创建事件"${event.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'event', event.id, event);
     return event;
   },
 
   updateEvent: (id, updates) => {
+    const before = createSnapshot(get());
+    const entityName = (get().events.find(e => e.id === id) as WorldEvent)?.name || '(未知)';
     set((state) => ({
       events: state.events.map((e) => e.id === id ? { ...e, ...updates } : e),
     }));
+    get()._pushHistory('update-event', `编辑事件"${entityName}"`, before);
     const updated = get().events.find(e => e.id === id);
     if (updated) worldForgeAPI.emitEntityEvent('entity:updated', 'event', id, updated);
   },
 
   deleteEvent: (id) => {
+    const before = createSnapshot(get());
+    const entityName = (get().events.find(e => e.id === id) as WorldEvent)?.name || '(未知)';
     set((state) => ({ events: state.events.filter((e) => e.id !== id) }));
+    get()._pushHistory('delete-event', `删除事件"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'event', id, null);
   },
 
@@ -315,6 +357,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   createFaction: (data) => {
     const { world } = get();
     if (!world) throw new Error('No world created yet');
+    const before = createSnapshot(get());
     const faction: Faction = {
       ...data,
       id: generateId(),
@@ -322,20 +365,27 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ factions: [...state.factions, faction] }));
+    get()._pushHistory('create-faction', `创建势力"${faction.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'faction', faction.id, faction);
     return faction;
   },
 
   updateFaction: (id, updates) => {
+    const before = createSnapshot(get());
+    const entityName = (get().factions.find(f => f.id === id) as Faction)?.name || '(未知)';
     set((state) => ({
       factions: state.factions.map((f) => f.id === id ? { ...f, ...updates } : f),
     }));
+    get()._pushHistory('update-faction', `编辑势力"${entityName}"`, before);
     const updated = get().factions.find(f => f.id === id);
     if (updated) worldForgeAPI.emitEntityEvent('entity:updated', 'faction', id, updated);
   },
 
   deleteFaction: (id) => {
+    const before = createSnapshot(get());
+    const entityName = (get().factions.find(f => f.id === id) as Faction)?.name || '(未知)';
     set((state) => ({ factions: state.factions.filter((f) => f.id !== id) }));
+    get()._pushHistory('delete-faction', `删除势力"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'faction', id, null);
   },
 
@@ -343,6 +393,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   createCharacter: (data) => {
     const { world } = get();
     if (!world) throw new Error('No world created yet');
+    const before = createSnapshot(get());
     const character: Character = {
       ...data,
       id: generateId(),
@@ -350,20 +401,27 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ characters: [...state.characters, character] }));
+    get()._pushHistory('create-character', `创建人物"${character.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'character', character.id, character);
     return character;
   },
 
   updateCharacter: (id, updates) => {
+    const before = createSnapshot(get());
+    const entityName = (get().characters.find(c => c.id === id) as Character)?.name || '(未知)';
     set((state) => ({
       characters: state.characters.map((c) => c.id === id ? { ...c, ...updates } : c),
     }));
+    get()._pushHistory('update-character', `编辑人物"${entityName}"`, before);
     const updated = get().characters.find(c => c.id === id);
     if (updated) worldForgeAPI.emitEntityEvent('entity:updated', 'character', id, updated);
   },
 
   deleteCharacter: (id) => {
+    const before = createSnapshot(get());
+    const entityName = (get().characters.find(c => c.id === id) as Character)?.name || '(未知)';
     set((state) => ({ characters: state.characters.filter((c) => c.id !== id) }));
+    get()._pushHistory('delete-character', `删除人物"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'character', id, null);
   },
 
@@ -430,6 +488,8 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   // 级联删除：删除大陆时删除其下属区域和地点
   cascadeDeleteContinent: (id: ID) => {
+    const before = createSnapshot(get());
+    const entityName = (get().continents.find(c => c.id === id) as Continent)?.name || '(未知)';
     const state = get();
     const regionIds = state.regions
       .filter((r) => r.continentId === id)
@@ -440,15 +500,51 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       regions: s.regions.filter((r) => r.continentId !== id),
       locations: s.locations.filter((l) => !regionIds.includes(l.regionId)),
     }));
+    get()._pushHistory('cascade-delete-continent', `删除大陆"${entityName}"及下属区域`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'continent', id, null);
   },
 
   // 级联删除：删除区域时删除其下属地点
   cascadeDeleteRegion: (id: ID) => {
+    const before = createSnapshot(get());
     set((s) => ({
       regions: s.regions.filter((r) => r.id !== id),
       locations: s.locations.filter((l) => l.regionId !== id),
     }));
+    const after = createSnapshot(get());
+    historyManager.push({
+      action: 'cascade-delete-region',
+      description: '删除区域及下属地点',
+      before,
+      after,
+    });
     worldForgeAPI.emitEntityEvent('entity:deleted', 'region', id, null);
+  },
+
+  // === 撤销/重做 ===
+  undo: () => {
+    const snapshot = historyManager.undo();
+    if (snapshot) {
+      set(restoreSnapshot(snapshot));
+    }
+  },
+
+  redo: () => {
+    const snapshot = historyManager.redo();
+    if (snapshot) {
+      set(restoreSnapshot(snapshot));
+    }
+  },
+
+  canUndo: () => historyManager.canUndo(),
+  canRedo: () => historyManager.canRedo(),
+
+  getUndoDescription: () => historyManager.getUndoDescription(),
+  getRedoDescription: () => historyManager.getRedoDescription(),
+
+  // 内部辅助函数：记录历史
+  _pushHistory: (action: ActionType, description: string, before: ReturnType<typeof createSnapshot>) => {
+    const after = createSnapshot(get());
+    historyManager.push({ action, description, before, after });
   },
 }));

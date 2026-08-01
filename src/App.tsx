@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useWorldStore } from './store/worldStore';
 import { registerBuiltInPlugins } from './plugins';
+import { useUndoRedo } from './hooks/useUndoRedo';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { MapView } from './components/MapView';
@@ -20,6 +21,7 @@ function App() {
   const { world, activeView, saveToStorage, loadFromStorage } = useWorldStore();
   const [pluginsRegistered, setPluginsRegistered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useUndoRedo();
 
   // 启动时加载数据
   useEffect(() => {
@@ -107,6 +109,11 @@ function App() {
         </main>
         <PropertiesPanel />
       </div>
+      {toast && (
+        <div className="undo-toast">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

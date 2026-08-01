@@ -2,11 +2,13 @@
 // PluginsView 插件管理视图
 // ============================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { pluginManager } from '../core/PluginManager';
 import { worldForgeAPI } from '../core/WorldForgeAPI';
 import { useWorldStore } from '../store/worldStore';
 import { downloadFile, downloadJSON, downloadMarkdown } from '../utils/download';
+import { exportToWFFile, readWFFile, downloadWFFile, type WFFile } from '../core/WFFile';
+import { historyManager } from '../core/History';
 import type { PluginManifest } from '../types';
 import '../App.css';
 
@@ -16,7 +18,10 @@ export function PluginsView() {
   const [exportFormat, setExportFormat] = useState<string>('markdown');
   const [exportResult, setExportResult] = useState<string>('');
   const [availableExporters, setAvailableExporters] = useState<string[]>([]);
-  const { world } = useWorldStore();
+  const [importMessage, setImportMessage] = useState<string>('');
+  const [importError, setImportError] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { world, continents, regions, locations, routes, eras, ages, events, factions, characters } = useWorldStore();
 
   useEffect(() => {
     setPlugins(pluginManager.getAllPlugins());
@@ -30,6 +35,75 @@ export function PluginsView() {
       pluginManager.enablePlugin(plugin.id);
     }
     setPlugins([...pluginManager.getAllPlugins()]);
+  };
+
+  // 导出为 WorldForge 文件
+  const handleExportWF = () => {
+    if (!world) return;
+    const wfData = exportToWFFile({
+      world,
+      continents,
+      regions,
+      locations,
+      routes,
+      eras,
+      ages,
+      events,
+      factions,
+      characters,
+    });
+    downloadWFFile(wfData);
+    setImportMessage('✅ WorldForge 文件已导出');
+    setImportError('');
+  };
+
+  // 导入 WorldForge 文件
+  const handleImportWF = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportMessage('');
+    setImportError('');
+
+    const result = await readWFFile(file);
+
+    if (!result.valid) {
+      setImportError(`导入失败: ${result.errors.join(', ')}`);
+      return;
+    }
+
+    if (result.warnings.length > 0) {
+      setImportMessage(`⚠️ 警告: ${result.warnings.join(', ')}`);
+    }
+
+    if (result.data) {
+      const data = result.data;
+      if (confirm(`确定要导入世界"${data.world.name}"吗？这将覆盖当前的所有数据。`)) {
+        // 清除历史
+        historyManager.clear();
+        // 加载数据
+        useWorldStore.setState({
+          world: data.world,
+          continents: data.continents || [],
+          regions: data.regions || [],
+          locations: data.locations || [],
+          routes: data.routes || [],
+          eras: data.eras || [],
+          ages: data.ages || [],
+          events: data.events || [],
+          factions: data.factions || [],
+          characters: data.characters || [],
+        });
+        // 保存到存储
+        useWorldStore.getState().saveToStorage();
+        setImportMessage(`✅ 成功导入世界"${data.world.name}"！`);
+      }
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleExport = async (download: boolean = false) => {
@@ -101,6 +175,62 @@ export function PluginsView() {
             }}
           >
             {exportResult}
+          </div>
+        )}
+      </div>
+
+      {/* WorldForge File Import/Export */}
+      <div style={{ marginBottom: '32px' }}>
+        <h3 style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
+          📦 WorldForge 文件 (.wf.json)
+        </h3>
+        <p style={{ fontSize: '12px', opacity: 0.6, marginBottom: '12px' }}>
+          导出完整世界观数据，或导入他人分享的 .wf.json 文件继续编辑
+        </p>
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+          <button
+            className="btn btn-primary"
+            onClick={handleExportWF}
+            disabled={!world}
+          >
+            📤 导出 .wf.json
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            📥 导入 .wf.json
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".wf.json,.json"
+            style={{ display: 'none' }}
+            onChange={handleImportWF}
+          />
+        </div>
+        {importMessage && (
+          <div style={{
+            padding: '10px 14px',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            color: 'var(--color-success)',
+            marginBottom: '8px',
+          }}>
+            {importMessage}
+          </div>
+        )}
+        {importError && (
+          <div style={{
+            padding: '10px 14px',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            color: 'var(--color-error)',
+            marginBottom: '8px',
+          }}>
+            {importError}
           </div>
         )}
       </div>
