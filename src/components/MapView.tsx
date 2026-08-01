@@ -52,6 +52,7 @@ export function MapView() {
   const [showDialog, setShowDialog] = useState(false);
   const [dialogData, setDialogData] = useState({ name: '', description: '', terrain: 'plains' as TerrainType });
   const [zoomSpeed, setZoomSpeed] = useState<number>(0.005); // 缩放速度：0.001(慢) ~ 0.02(快)
+  const [canvasBgColor, setCanvasBgColor] = useState('#16213e'); // 画布背景色
 
   // Convert screen coordinates to world coordinates
   const screenToWorld = useCallback((clientX: number, clientY: number) => {
@@ -95,7 +96,7 @@ export function MapView() {
     ctx.scale(viewport.zoom, viewport.zoom);
 
     // 绘制可视区域背景（防止透明区域）
-    ctx.fillStyle = 'var(--color-bg-secondary)';
+    ctx.fillStyle = canvasBgColor;
     ctx.fillRect(
       -viewport.x / viewport.zoom - 1,
       -viewport.y / viewport.zoom - 1,
@@ -238,6 +239,30 @@ export function MapView() {
     }));
   };
 
+  // 绘制模式下 Ctrl+Z 撤销最后一个点
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if (drawing && drawing.points.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDrawing((d) => {
+          if (!d) return null;
+          const newPoints = d.points.slice(0, -1);
+          return newPoints.length > 0 ? { ...d, points: newPoints } : null;
+        });
+      }
+    }
+    // Escape 取消绘制
+    if (e.key === 'Escape') {
+      if (drawing) {
+        setDrawing(null);
+      } else if (polygonEdit) {
+        setPolygonEdit(null);
+        setTool('select');
+      }
+    }
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     const worldPos = screenToWorld(e.clientX, e.clientY);
 
@@ -247,25 +272,25 @@ export function MapView() {
       return;
     }
 
-    if (tool === 'select') {
-      // Check if clicking on a vertex in edit mode
-      if (polygonEdit) {
-        const entity = polygonEdit.entityType === 'continent'
-          ? continents.find(c => c.id === polygonEdit.entityId)
-          : regions.find(r => r.id === polygonEdit.entityId);
-        if (entity) {
-          for (let i = 0; i < entity.bounds.points.length; i++) {
-            const point = entity.bounds.points[i];
-            const dx = point.x - worldPos.x;
-            const dy = point.y - worldPos.y;
-            if (Math.sqrt(dx * dx + dy * dy) < 10 / viewport.zoom) {
-              setPolygonEdit({ ...polygonEdit, dragVertexIndex: i });
-              return;
-            }
+    // 编辑模式下拖动顶点（必须在最外层判断，不依赖 tool === 'select'）
+    if (polygonEdit && tool === 'edit-polygon') {
+      const entity = polygonEdit.entityType === 'continent'
+        ? continents.find(c => c.id === polygonEdit.entityId)
+        : regions.find(r => r.id === polygonEdit.entityId);
+      if (entity) {
+        for (let i = 0; i < entity.bounds.points.length; i++) {
+          const point = entity.bounds.points[i];
+          const dx = point.x - worldPos.x;
+          const dy = point.y - worldPos.y;
+          if (Math.sqrt(dx * dx + dy * dy) < 10 / viewport.zoom) {
+            setPolygonEdit({ ...polygonEdit, dragVertexIndex: i });
+            return;
           }
         }
       }
+    }
 
+    if (tool === 'select') {
       // Check if clicking on a location
       for (const location of locations) {
         const dx = location.position.x - worldPos.x;
@@ -477,13 +502,15 @@ export function MapView() {
       <canvas
         ref={canvasRef}
         className="map-canvas"
+        tabIndex={0}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onDoubleClick={handleDoubleClick}
-        style={{ cursor: getCursor(tool) }}
+        onKeyDown={handleKeyDown}
+        style={{ cursor: getCursor(tool), outline: 'none' }}
       />
       <div className="map-toolbar">
         <button
@@ -533,6 +560,13 @@ export function MapView() {
           🔄 重置
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+          <input
+            type="color"
+            value={canvasBgColor}
+            onChange={(e) => setCanvasBgColor(e.target.value)}
+            title="画布背景色"
+            style={{ width: '28px', height: '24px', border: '1px solid var(--color-border)', borderRadius: '4px', cursor: 'pointer', padding: '0' }}
+          />
           <span style={{ fontSize: '12px', opacity: 0.6 }}>
             缩放: {Math.round(viewport.zoom * 100)}%
           </span>
