@@ -7,11 +7,17 @@ import { useWorldStore } from '../store/worldStore';
 import type { Continent, Region, Location, TerrainType } from '../types';
 import '../App.css';
 
-type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-location' | 'edit-polygon';
+type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-location' | 'edit-polygon' | 'split';
 
 interface DrawingState {
   points: { x: number; y: number }[];
   targetContinentId?: string; // For region drawing
+}
+
+interface SplitState {
+  startPoint: { x: number; y: number } | null;
+  endPoint: { x: number; y: number } | null;
+  selectedContinentId: string | null;
 }
 
 interface PolygonEditState {
@@ -53,6 +59,7 @@ export function MapView() {
   const [dialogData, setDialogData] = useState({ name: '', description: '', terrain: 'plains' as TerrainType });
   const [zoomSpeed, setZoomSpeed] = useState<number>(0.005); // 缩放速度：0.001(慢) ~ 0.02(快)
   const [canvasBgColor, setCanvasBgColor] = useState('#16213e'); // 画布背景色
+  const [splitState, setSplitState] = useState<SplitState>({ startPoint: null, endPoint: null, selectedContinentId: null });
 
   // Convert screen coordinates to world coordinates
   const screenToWorld = useCallback((clientX: number, clientY: number) => {
@@ -80,18 +87,21 @@ export function MapView() {
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    // 限制最大绘制缓冲区，防止过大导致性能问题或布局溢出
-    const maxWidth = 4000;
-    const maxHeight = 3000;
-    canvas.width = Math.min(rect.width, maxWidth);
-    canvas.height = Math.min(rect.height, maxHeight);
+    // 绘制缓冲区严格匹配 CSS 尺寸，防止溢出
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    // 确保 CSS 尺寸严格限制
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
 
     // 先重置变换，清除整个画布
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 应用视口变换
+    // 应用视口变换（包含 DPR 缩放）
     ctx.save();
+    ctx.scale(dpr, dpr);
     ctx.translate(viewport.x, viewport.y);
     ctx.scale(viewport.zoom, viewport.zoom);
 
@@ -215,8 +225,30 @@ export function MapView() {
       }
     }
 
+    // 绘制切分线预览
+    if (tool === 'split' && splitState.startPoint && splitState.endPoint) {
+      ctx.beginPath();
+      ctx.moveTo(splitState.startPoint.x, splitState.startPoint.y);
+      ctx.lineTo(splitState.endPoint.x, splitState.endPoint.y);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 绘制端点
+      ctx.beginPath();
+      ctx.arc(splitState.startPoint.x, splitState.startPoint.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(splitState.endPoint.x, splitState.endPoint.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fill();
+    }
+
     ctx.restore();
-  }, [continents, regions, locations, selectedEntityType, selectedEntityId, viewport, drawing, mousePos, polygonEdit]);
+  }, [continents, regions, locations, selectedEntityType, selectedEntityId, viewport, drawing, mousePos, polygonEdit, splitState, tool]);
 
   useEffect(() => {
     draw();
@@ -269,6 +301,38 @@ export function MapView() {
     if (tool === 'pan') {
       setIsDragging(true);
       setDragStart({ x: e.clientX - viewport.x, y: e.clientY - viewport.y });
+      return;
+    }
+
+    // 切分工具：选择大陆并绘制切分线
+    if (tool === 'split') {
+      // 查找点击的大陆
+      let clickedContinent: string | null = null;
+      for (const continent of continents) {
+        if (isPointInPolygon(worldPos, continent.bounds.points)) {
+          clickedContinent = continent.id;
+          break;
+        }
+      }
+
+      if (clickedContinent) {
+        if (!splitState.startPoint) {
+          // 第一次点击：设置起点
+          setSplitState({ startPoint: worldPos, endPoint: null, selectedContinentId: clickedContinent });
+          selectEntity('continent', clickedContinent);
+        } else if (splitState.selectedContinentId === clickedContinent) {
+          // 第二次点击（同一个大陆）：执行切分
+          const result = splitPolygon(
+            continents.find(c => c.id === clickedContinent)!.bounds.points,
+            splitState.startPoint,
+            worldPos
+          );
+          if (result) {
+            handleSplitContinent(clickedContinent, result[0], result[1]);
+          }
+          setSplitState({ startPoint: null, endPoint: null, selectedContinentId: null });
+        }
+      }
       return;
     }
 
@@ -373,6 +437,11 @@ export function MapView() {
       return;
     }
 
+    // 切分工具：更新切分线终点预览
+    if (tool === 'split' && splitState.startPoint) {
+      setSplitState({ ...splitState, endPoint: worldPos });
+    }
+
     // Handle vertex dragging in polygon edit mode
     if (polygonEdit?.dragVertexIndex !== null && polygonEdit?.dragVertexIndex !== undefined) {
       const { entityType, entityId, dragVertexIndex } = polygonEdit;
@@ -410,6 +479,34 @@ export function MapView() {
   const handleClosePolygon = () => {
     if (!drawing || drawing.points.length < 3) return;
     setShowDialog(true);
+  };
+
+  // 执行大陆切分：删除原大陆，创建两个新区域
+  const handleSplitContinent = (continentId: string, poly1: { x: number; y: number }[], poly2: { x: number; y: number }[]) => {
+    const continent = continents.find(c => c.id === continentId);
+    if (!continent) return;
+
+    // 删除原大陆
+    cascadeDeleteContinent(continentId);
+
+    // 创建两个新区域
+    createRegion({
+      continentId: continentId, // 使用原大陆ID（虽然大陆已删除，但区域仍可存在）,
+      name: `${continent.name} - A`,
+      description: `从${continent.name}切分出的区域A`,
+      bounds: { points: poly1 },
+      terrain: 'plains',
+      resources: [],
+    });
+
+    createRegion({
+      continentId: continentId,
+      name: `${continent.name} - B`,
+      description: `从${continent.name}切分出的区域B`,
+      bounds: { points: poly2 },
+      terrain: 'plains',
+      resources: [],
+    });
   };
 
   const handleDialogSubmit = () => {
@@ -543,6 +640,12 @@ export function MapView() {
         >
           📍 添加地点
         </button>
+        <button
+          className={tool === 'split' ? 'active' : ''}
+          onClick={() => { setTool('split'); setPolygonEdit(null); setSplitState({ startPoint: null, endPoint: null, selectedContinentId: null }); }}
+        >
+          ✂️ 切分大陆
+        </button>
         {selectedEntityType && selectedEntityId && (
           <>
             <button
@@ -602,6 +705,15 @@ export function MapView() {
           <button onClick={handleFinishEdit} style={{ marginLeft: '12px' }}>
             ✓ 完成编辑
           </button>
+        </div>
+      )}
+
+      {/* Split hint */}
+      {tool === 'split' && (
+        <div className="map-hint">
+          {!splitState.startPoint
+            ? '点击大陆选择切分起点'
+            : '再次点击同一大陆完成切分（两点确定一条切分线）'}
         </div>
       )}
 
@@ -767,8 +879,114 @@ function getCursor(tool: ToolMode): string {
     case 'pan': return 'grab';
     case 'draw-continent':
     case 'draw-region':
-    case 'add-location': return 'crosshair';
+    case 'add-location':
+    case 'split': return 'crosshair';
     case 'edit-polygon': return 'move';
     default: return 'default';
   }
+}
+
+// ============================================
+// 多边形切分算法
+// ============================================
+
+// 计算两条线段的交点
+function lineIntersection(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  p3: { x: number; y: number },
+  p4: { x: number; y: number }
+): { x: number; y: number; t: number } | null {
+  const denom = (p4.y - p3.y) * (p2.x - p1.x) - (p4.x - p3.x) * (p2.y - p1.y);
+  if (Math.abs(denom) < 1e-10) return null; // 平行
+
+  const t = ((p4.x - p3.x) * (p1.y - p3.y) - (p4.y - p3.y) * (p1.x - p3.x)) / denom;
+  const u = -((p2.x - p1.x) * (p1.y - p3.y) - (p2.y - p1.y) * (p1.x - p3.x)) / denom;
+
+  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+    return {
+      x: p1.x + t * (p2.x - p1.x),
+      y: p1.y + t * (p2.y - p1.y),
+      t,
+    };
+  }
+  return null;
+}
+
+// 切分多边形：返回两个多边形（如果无法切分则返回 null）
+function splitPolygon(
+  polygon: { x: number; y: number }[],
+  lineStart: { x: number; y: number },
+  lineEnd: { x: number; y: number }
+): [{ x: number; y: number }[], { x: number; y: number }[]] | null {
+  if (polygon.length < 3) return null;
+
+  // 找到所有交点
+  const intersections: { point: { x: number; y: number }; edgeIndex: number; t: number }[] = [];
+
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length;
+    const intersection = lineIntersection(polygon[i], polygon[j], lineStart, lineEnd);
+    if (intersection) {
+      intersections.push({
+        point: { x: intersection.x, y: intersection.y },
+        edgeIndex: i,
+        t: intersection.t,
+      });
+    }
+  }
+
+  // 需要恰好 2 个交点才能切分
+  if (intersections.length < 2) return null;
+
+  // 按边的顺序排序
+  intersections.sort((a, b) => a.edgeIndex - b.edgeIndex || a.t - b.t);
+
+  // 取前两个交点
+  const int1 = intersections[0];
+  const int2 = intersections[1];
+
+  // 构建两个新多边形
+  const poly1: { x: number; y: number }[] = [];
+  const poly2: { x: number; y: number }[] = [];
+
+  // 添加第一个交点
+  poly1.push(int1.point);
+  poly2.push(int1.point);
+
+  // 从 int1 的边到 int2 的边，沿多边形边界走
+  let i = (int1.edgeIndex + 1) % polygon.length;
+  const endEdge = (int2.edgeIndex + 1) % polygon.length;
+
+  // poly1: 沿多边形从 int1 到 int2
+  while (i !== endEdge) {
+    poly1.push(polygon[i]);
+    i = (i + 1) % polygon.length;
+  }
+  poly1.push(int2.point);
+
+  // poly2: 沿多边形从 int2 到 int1（另一侧）
+  i = (int2.edgeIndex + 1) % polygon.length;
+  const endEdge2 = (int1.edgeIndex + 1) % polygon.length;
+  while (i !== endEdge2) {
+    poly2.push(polygon[i]);
+    i = (i + 1) % polygon.length;
+  }
+  poly2.push(poly2[0]); // 闭合
+
+  // 确保两个多边形都有效（至少 3 个点且不共线）
+  if (poly1.length < 3 || poly2.length < 3) return null;
+
+  return [poly1, poly2];
+}
+
+// 计算多边形面积（用于验证切分结果）
+function polygonArea(polygon: { x: number; y: number }[]): number {
+  let area = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length;
+    area += polygon[i].x * polygon[j].y;
+    area -= polygon[j].x * polygon[i].y;
+  }
+  return Math.abs(area) / 2;
 }
