@@ -1,19 +1,69 @@
 // ============================================
-// MapView 地图视图
+// MapView 地图视图 - 多边形绘制工具
 // ============================================
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWorldStore } from '../store/worldStore';
-import type { Continent, Region, Location } from '../types';
+import type { Continent, Region, Location, TerrainType } from '../types';
 import '../App.css';
+
+type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-location' | 'edit-polygon';
+
+interface DrawingState {
+  points: { x: number; y: number }[];
+  targetContinentId?: string; // For region drawing
+}
+
+interface PolygonEditState {
+  entityType: 'continent' | 'region';
+  entityId: string;
+  dragVertexIndex: number | null;
+}
 
 export function MapView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { continents, regions, locations, selectedEntityId, selectEntity } = useWorldStore();
+  const {
+    continents,
+    regions,
+    locations,
+    selectedEntityType,
+    selectedEntityId,
+    selectEntity,
+    createContinent,
+    createRegion,
+    createLocation,
+    updateContinent,
+    updateRegion,
+  } = useWorldStore();
+
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [tool, setTool] = useState<'select' | 'pan' | 'add'>('select');
+  const [tool, setTool] = useState<ToolMode>('select');
+  const [drawing, setDrawing] = useState<DrawingState | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [polygonEdit, setPolygonEdit] = useState<PolygonEditState | null>(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const [dialogData, setDialogData] = useState({ name: '', description: '', terrain: 'plains' as TerrainType });
+
+  // Convert screen coordinates to world coordinates
+  const screenToWorld = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - viewport.x) / viewport.zoom,
+      y: (clientY - rect.top - viewport.y) / viewport.zoom,
+    };
+  }, [viewport]);
+
+  // Convert world coordinates to screen coordinates
+  const worldToScreen = useCallback((worldX: number, worldY: number) => {
+    return {
+      x: worldX * viewport.zoom + viewport.x,
+      y: worldY * viewport.zoom + viewport.y,
+    };
+  }, [viewport]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -30,50 +80,49 @@ export function MapView() {
     ctx.translate(viewport.x, viewport.y);
     ctx.scale(viewport.zoom, viewport.zoom);
 
+    // Draw grid
+    drawGrid(ctx, canvas.width, canvas.height, viewport);
+
     // Draw continents
     for (const continent of continents) {
-      if (continent.bounds.points.length > 2) {
-        ctx.beginPath();
-        ctx.moveTo(continent.bounds.points[0].x, continent.bounds.points[0].y);
-        for (let i = 1; i < continent.bounds.points.length; i++) {
-          ctx.lineTo(continent.bounds.points[i].x, continent.bounds.points[i].y);
-        }
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(30, 41, 59, 0.6)';
-        ctx.fill();
-        ctx.strokeStyle = selectedEntityId === continent.id ? '#e94560' : '#475569';
-        ctx.lineWidth = selectedEntityId === continent.id ? 3 : 1;
-        ctx.stroke();
-
-        // Label
-        const center = getCenter(continent.bounds.points);
-        ctx.fillStyle = '#e4e4e7';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(continent.name, center.x, center.y);
-      }
+      drawPolygon(
+        ctx,
+        continent.bounds.points,
+        'rgba(30, 41, 59, 0.6)',
+        selectedEntityType === 'continent' && selectedEntityId === continent.id ? '#e94560' : '#475569',
+        selectedEntityType === 'continent' && selectedEntityId === continent.id ? 3 : 1,
+        continent.name,
+        14,
+        '#e4e4e7'
+      );
     }
 
     // Draw regions
     for (const region of regions) {
-      if (region.bounds.points.length > 2) {
-        ctx.beginPath();
-        ctx.moveTo(region.bounds.points[0].x, region.bounds.points[0].y);
-        for (let i = 1; i < region.bounds.points.length; i++) {
-          ctx.lineTo(region.bounds.points[i].x, region.bounds.points[i].y);
-        }
-        ctx.closePath();
-        ctx.fillStyle = getTerrainColor(region.terrain);
-        ctx.fill();
-        ctx.strokeStyle = selectedEntityId === region.id ? '#e94560' : '#334155';
-        ctx.lineWidth = selectedEntityId === region.id ? 2 : 1;
-        ctx.stroke();
+      const isSelected = selectedEntityType === 'region' && selectedEntityId === region.id;
+      const isEditing = polygonEdit?.entityType === 'region' && polygonEdit?.entityId === region.id;
+      drawPolygon(
+        ctx,
+        region.bounds.points,
+        getTerrainColor(region.terrain),
+        isSelected || isEditing ? '#e94560' : '#334155',
+        isSelected || isEditing ? 2 : 1,
+        region.name,
+        12,
+        '#cbd5e1'
+      );
 
-        const center = getCenter(region.bounds.points);
-        ctx.fillStyle = '#cbd5e1';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(region.name, center.x, center.y);
+      // Draw vertex handles when editing
+      if (isEditing) {
+        for (const point of region.bounds.points) {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#e94560';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
     }
 
@@ -81,8 +130,7 @@ export function MapView() {
     for (const location of locations) {
       const { x, y } = location.position;
       const isSelected = selectedEntityId === location.id;
-      
-      // Location marker
+
       ctx.beginPath();
       ctx.arc(x, y, isSelected ? 8 : 5, 0, Math.PI * 2);
       ctx.fillStyle = isSelected ? '#e94560' : '#3b82f6';
@@ -91,15 +139,60 @@ export function MapView() {
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Label
       ctx.fillStyle = '#e4e4e7';
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(location.name, x, y - 12);
     }
 
+    // Draw current polygon being drawn
+    if (drawing && drawing.points.length > 0) {
+      const allPoints = mousePos ? [...drawing.points, mousePos] : drawing.points;
+
+      // Draw lines
+      if (allPoints.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(allPoints[0].x, allPoints[0].y);
+        for (let i = 1; i < allPoints.length; i++) {
+          ctx.lineTo(allPoints[i].x, allPoints[i].y);
+        }
+        ctx.strokeStyle = '#e94560';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw points
+      for (let i = 0; i < drawing.points.length; i++) {
+        const point = drawing.points[i];
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = i === 0 && drawing.points.length >= 3 ? '#10b981' : '#e94560';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Draw closing hint
+      if (drawing.points.length >= 3 && mousePos) {
+        const firstPoint = drawing.points[0];
+        const dx = mousePos.x - firstPoint.x;
+        const dy = mousePos.y - firstPoint.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 15) {
+          ctx.beginPath();
+          ctx.arc(firstPoint.x, firstPoint.y, 10, 0, Math.PI * 2);
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      }
+    }
+
     ctx.restore();
-  }, [continents, regions, locations, selectedEntityId, viewport]);
+  }, [continents, regions, locations, selectedEntityType, selectedEntityId, viewport, drawing, mousePos, polygonEdit]);
 
   useEffect(() => {
     draw();
@@ -118,40 +211,210 @@ export function MapView() {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+
     if (tool === 'pan') {
       setIsDragging(true);
       setDragStart({ x: e.clientX - viewport.x, y: e.clientY - viewport.y });
-    } else if (tool === 'select') {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left - viewport.x) / viewport.zoom;
-      const y = (e.clientY - rect.top - viewport.y) / viewport.zoom;
-      
-      // Check if clicked on a location
+      return;
+    }
+
+    if (tool === 'select') {
+      // Check if clicking on a vertex in edit mode
+      if (polygonEdit) {
+        const entity = polygonEdit.entityType === 'continent'
+          ? continents.find(c => c.id === polygonEdit.entityId)
+          : regions.find(r => r.id === polygonEdit.entityId);
+        if (entity) {
+          for (let i = 0; i < entity.bounds.points.length; i++) {
+            const point = entity.bounds.points[i];
+            const dx = point.x - worldPos.x;
+            const dy = point.y - worldPos.y;
+            if (Math.sqrt(dx * dx + dy * dy) < 10 / viewport.zoom) {
+              setPolygonEdit({ ...polygonEdit, dragVertexIndex: i });
+              return;
+            }
+          }
+        }
+      }
+
+      // Check if clicking on a location
       for (const location of locations) {
-        const dx = location.position.x - x;
-        const dy = location.position.y - y;
-        if (Math.sqrt(dx * dx + dy * dy) < 10) {
+        const dx = location.position.x - worldPos.x;
+        const dy = location.position.y - worldPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 10 / viewport.zoom) {
           selectEntity('location', location.id);
           return;
         }
       }
+
+      // Check if clicking on a continent
+      for (const continent of continents) {
+        if (isPointInPolygon(worldPos, continent.bounds.points)) {
+          selectEntity('continent', continent.id);
+          return;
+        }
+      }
+
+      // Check if clicking on a region
+      for (const region of regions) {
+        if (isPointInPolygon(worldPos, region.bounds.points)) {
+          selectEntity('region', region.id);
+          return;
+        }
+      }
+
+      return;
+    }
+
+    if (tool === 'draw-continent' || tool === 'draw-region') {
+      if (!drawing) {
+        setDrawing({ points: [worldPos] });
+      } else {
+        // Check if clicking near first point to close
+        if (drawing.points.length >= 3) {
+          const firstPoint = drawing.points[0];
+          const dx = worldPos.x - firstPoint.x;
+          const dy = worldPos.y - firstPoint.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 15 / viewport.zoom) {
+            // Close polygon
+            handleClosePolygon();
+            return;
+          }
+        }
+        setDrawing({ ...drawing, points: [...drawing.points, worldPos] });
+      }
+      return;
+    }
+
+    if (tool === 'add-location') {
+      const name = prompt('地点名称:');
+      if (name) {
+        const regionId = regions.length > 0 ? regions[0].id : '';
+        createLocation({
+          regionId,
+          name,
+          aliases: [],
+          type: 'city',
+          position: worldPos,
+          description: '',
+          notableSites: [],
+          resources: [],
+        });
+      }
+      return;
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+    setMousePos(worldPos);
+
     if (isDragging && tool === 'pan') {
       setViewport((v) => ({
         ...v,
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y,
       }));
+      return;
+    }
+
+    // Handle vertex dragging in polygon edit mode
+    if (polygonEdit?.dragVertexIndex !== null && polygonEdit?.dragVertexIndex !== undefined) {
+      const { entityType, entityId, dragVertexIndex } = polygonEdit;
+      if (entityType === 'continent') {
+        const continent = continents.find(c => c.id === entityId);
+        if (continent && dragVertexIndex !== null) {
+          const newPoints = [...continent.bounds.points];
+          newPoints[dragVertexIndex] = worldPos;
+          updateContinent(entityId, { bounds: { points: newPoints } });
+        }
+      } else if (entityType === 'region') {
+        const region = regions.find(r => r.id === entityId);
+        if (region && dragVertexIndex !== null) {
+          const newPoints = [...region.bounds.points];
+          newPoints[dragVertexIndex] = worldPos;
+          updateRegion(entityId, { bounds: { points: newPoints } });
+        }
+      }
     }
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    if (polygonEdit) {
+      setPolygonEdit({ ...polygonEdit, dragVertexIndex: null });
+    }
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if ((tool === 'draw-continent' || tool === 'draw-region') && drawing && drawing.points.length >= 3) {
+      handleClosePolygon();
+    }
+  };
+
+  const handleClosePolygon = () => {
+    if (!drawing || drawing.points.length < 3) return;
+    setShowDialog(true);
+  };
+
+  const handleDialogSubmit = () => {
+    if (!drawing || drawing.points.length < 3) return;
+
+    if (tool === 'draw-continent') {
+      createContinent({
+        name: dialogData.name,
+        description: dialogData.description,
+        bounds: { points: drawing.points },
+        climate: '',
+      });
+    } else if (tool === 'draw-region') {
+      const continentId = drawing.targetContinentId || (continents.length > 0 ? continents[0].id : '');
+      createRegion({
+        continentId,
+        name: dialogData.name,
+        description: dialogData.description,
+        bounds: { points: drawing.points },
+        terrain: dialogData.terrain,
+        resources: [],
+      });
+    }
+
+    setShowDialog(false);
+    setDrawing(null);
+    setDialogData({ name: '', description: '', terrain: 'plains' });
+    setTool('select');
+  };
+
+  const handleDialogCancel = () => {
+    setShowDialog(false);
+    setDrawing(null);
+    setDialogData({ name: '', description: '', terrain: 'plains' });
+  };
+
+  const handleStartEdit = (entityType: 'continent' | 'region', entityId: string) => {
+    setPolygonEdit({ entityType, entityId, dragVertexIndex: null });
+    setTool('edit-polygon');
+    selectEntity(entityType, entityId);
+  };
+
+  const handleFinishEdit = () => {
+    setPolygonEdit(null);
+    setTool('select');
+  };
+
+  const handleDeleteSelected = () => {
+    if (!selectedEntityId) return;
+    if (selectedEntityType === 'continent') {
+      if (confirm('确定要删除这个大陆吗？')) {
+        // Need to add deleteContinent to store
+      }
+    } else if (selectedEntityType === 'region') {
+      if (confirm('确定要删除这个区域吗？')) {
+        // Need to add deleteRegion to store
+      }
+    }
   };
 
   return (
@@ -164,35 +427,219 @@ export function MapView() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onDoubleClick={handleDoubleClick}
+        style={{ cursor: getCursor(tool) }}
       />
       <div className="map-toolbar">
         <button
           className={tool === 'select' ? 'active' : ''}
-          onClick={() => setTool('select')}
+          onClick={() => { setTool('select'); setPolygonEdit(null); }}
         >
           👆 选择
         </button>
         <button
           className={tool === 'pan' ? 'active' : ''}
-          onClick={() => setTool('pan')}
+          onClick={() => { setTool('pan'); setPolygonEdit(null); }}
         >
           ✋ 平移
         </button>
+        <button
+          className={tool === 'draw-continent' ? 'active' : ''}
+          onClick={() => { setTool('draw-continent'); setDrawing(null); setPolygonEdit(null); }}
+        >
+          🌍 绘制大陆
+        </button>
+        <button
+          className={tool === 'draw-region' ? 'active' : ''}
+          onClick={() => { setTool('draw-region'); setDrawing(null); setPolygonEdit(null); }}
+        >
+          🏔️ 绘制区域
+        </button>
+        <button
+          className={tool === 'add-location' ? 'active' : ''}
+          onClick={() => { setTool('add-location'); setPolygonEdit(null); }}
+        >
+          📍 添加地点
+        </button>
+        {selectedEntityType && selectedEntityId && (
+          <>
+            <button
+              className={tool === 'edit-polygon' ? 'active' : ''}
+              onClick={() => handleStartEdit(selectedEntityType as 'continent' | 'region', selectedEntityId)}
+            >
+              ✏️ 编辑形状
+            </button>
+            <button onClick={handleDeleteSelected}>
+              🗑️ 删除
+            </button>
+          </>
+        )}
         <button onClick={() => setViewport({ x: 0, y: 0, zoom: 1 })}>
-          🔄 重置视图
+          🔄 重置
         </button>
         <span style={{ marginLeft: 'auto', fontSize: '12px', opacity: 0.6 }}>
           缩放: {Math.round(viewport.zoom * 100)}%
         </span>
       </div>
+
+      {/* Drawing hint */}
+      {drawing && (
+        <div className="map-hint">
+          {drawing.points.length < 3
+            ? `继续点击添加顶点 (${drawing.points.length}/3+)`
+            : '双击或点击第一个点闭合多边形'}
+        </div>
+      )}
+
+      {/* Polygon edit hint */}
+      {polygonEdit && (
+        <div className="map-hint">
+          拖拽顶点调整形状 · 点击"选择"工具退出编辑
+          <button onClick={handleFinishEdit} style={{ marginLeft: '12px' }}>
+            ✓ 完成编辑
+          </button>
+        </div>
+      )}
+
+      {/* Dialog for polygon properties */}
+      {showDialog && (
+        <div className="map-dialog-overlay">
+          <div className="map-dialog">
+            <h3>{tool === 'draw-continent' ? '🌍 新建大陆' : '🏔️ 新建区域'}</h3>
+            <div className="form-group">
+              <label className="form-label">名称 *</label>
+              <input
+                className="form-input"
+                value={dialogData.name}
+                onChange={(e) => setDialogData({ ...dialogData, name: e.target.value })}
+                placeholder="输入名称..."
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">描述</label>
+              <textarea
+                className="form-input form-textarea"
+                value={dialogData.description}
+                onChange={(e) => setDialogData({ ...dialogData, description: e.target.value })}
+                placeholder="输入描述..."
+              />
+            </div>
+            {tool === 'draw-region' && (
+              <div className="form-group">
+                <label className="form-label">地形</label>
+                <select
+                  className="form-input"
+                  value={dialogData.terrain}
+                  onChange={(e) => setDialogData({ ...dialogData, terrain: e.target.value as TerrainType })}
+                >
+                  <option value="plains">平原</option>
+                  <option value="mountains">山脉</option>
+                  <option value="forest">森林</option>
+                  <option value="desert">沙漠</option>
+                  <option value="ocean">海洋</option>
+                  <option value="swamp">沼泽</option>
+                  <option value="tundra">冻原</option>
+                  <option value="hills">丘陵</option>
+                  <option value="jungle">丛林</option>
+                  <option value="wasteland">荒地</option>
+                </select>
+              </div>
+            )}
+            <div className="map-dialog-actions">
+              <button className="btn btn-secondary" onClick={handleDialogCancel}>
+                取消
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleDialogSubmit}
+                disabled={!dialogData.name.trim()}
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// ============================================
+// Helper functions
+// ============================================
+
+function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, viewport: { x: number; y: number; zoom: number }) {
+  const gridSize = 50;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+  ctx.lineWidth = 1;
+
+  const startX = Math.floor(-viewport.x / viewport.zoom / gridSize) * gridSize;
+  const startY = Math.floor(-viewport.y / viewport.zoom / gridSize) * gridSize;
+  const endX = startX + (width / viewport.zoom) + gridSize * 2;
+  const endY = startY + (height / viewport.zoom) + gridSize * 2;
+
+  ctx.beginPath();
+  for (let x = startX; x <= endX; x += gridSize) {
+    ctx.moveTo(x, startY);
+    ctx.lineTo(x, endY);
+  }
+  for (let y = startY; y <= endY; y += gridSize) {
+    ctx.moveTo(startX, y);
+    ctx.lineTo(endX, y);
+  }
+  ctx.stroke();
+}
+
+function drawPolygon(
+  ctx: CanvasRenderingContext2D,
+  points: { x: number; y: number }[],
+  fillColor: string,
+  strokeColor: string,
+  lineWidth: number,
+  label: string,
+  fontSize: number,
+  labelColor: string
+) {
+  if (points.length < 3) return;
+
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = lineWidth;
+  ctx.stroke();
+
+  // Label
+  const center = getCenter(points);
+  ctx.fillStyle = labelColor;
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, center.x, center.y);
 }
 
 function getCenter(points: { x: number; y: number }[]): { x: number; y: number } {
   if (points.length === 0) return { x: 0, y: 0 };
   const sum = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
   return { x: sum.x / points.length, y: sum.y / points.length };
+}
+
+function isPointInPolygon(point: { x: number; y: number }, polygon: { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y;
+    const xj = polygon[j].x, yj = polygon[j].y;
+    const intersect = ((yi > point.y) !== (yj > point.y)) &&
+      (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 function getTerrainColor(terrain: string): string {
@@ -209,4 +656,15 @@ function getTerrainColor(terrain: string): string {
     wasteland: 'rgba(120, 113, 108, 0.1)',
   };
   return colors[terrain] || 'rgba(100, 116, 139, 0.1)';
+}
+
+function getCursor(tool: ToolMode): string {
+  switch (tool) {
+    case 'pan': return 'grab';
+    case 'draw-continent':
+    case 'draw-region':
+    case 'add-location': return 'crosshair';
+    case 'edit-polygon': return 'move';
+    default: return 'default';
+  }
 }
