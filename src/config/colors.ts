@@ -6,9 +6,9 @@
 
 export const Theme = {
   // 背景色（三层深度）
-  bgPrimary: '#6f1898',
-  bgSecondary: '#5b063d',
-  bgTertiary: '#aa0d85',
+  bgPrimary: '#05077a',
+  bgSecondary: '#07065b',
+  bgTertiary: '#310582',
 
   // 文字色
   textPrimary: '#e4e4e7',
@@ -83,7 +83,7 @@ export const CanvasColors = {
   },
 
   // 画布背景
-  canvasBackground: '#16213e',
+  canvasBackground: '#064446',
 } as const;
 
 // === 地形颜色 ===
