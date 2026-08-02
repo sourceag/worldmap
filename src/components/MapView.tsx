@@ -12,6 +12,8 @@ type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-locat
 interface DrawingState {
   points: { x: number; y: number }[];
   targetContinentId?: string; // For region drawing - 指定所属大陆
+  snapToEdge?: 'continent' | 'region'; // 边缘贴合模式
+  snappedEdgeId?: string;    // 贴合的边缘所属实体 ID
 }
 
 interface PolygonEditState {
@@ -347,9 +349,13 @@ export function MapView() {
 
     if (tool === 'draw-continent' || tool === 'draw-region') {
       if (!drawing) {
-        // 首次点击：如果是绘制区域，检测所属大陆
+        // 首次点击：如果是绘制区域，检测所属大陆和边缘贴合
         let targetContinentId: string | undefined;
+        let snapToEdge: 'continent' | 'region' | undefined;
+        let snappedEdgeId: string | undefined;
+
         if (tool === 'draw-region') {
+          // 查找点击的大陆
           for (const continent of continents) {
             if (isPointInPolygon(worldPos, continent.bounds.points)) {
               targetContinentId = continent.id;
@@ -360,17 +366,52 @@ export function MapView() {
             alert('请先点击选择一个大陆，在大陆内部绘制区域');
             return;
           }
+
+          // 检测是否点击在大陆边缘
+          const continent = continents.find(c => c.id === targetContinentId)!;
+          if (isPointOnEdge(worldPos, continent.bounds.points, 15 / viewport.zoom)) {
+            snapToEdge = 'continent';
+            snappedEdgeId = targetContinentId;
+          } else {
+            // 检测是否点击在其他区域边缘
+            for (const region of regions) {
+              if (region.continentId === targetContinentId && isPointOnEdge(worldPos, region.bounds.points, 15 / viewport.zoom)) {
+                snapToEdge = 'region';
+                snappedEdgeId = region.id;
+                break;
+              }
+            }
+          }
         }
-        setDrawing({ points: [worldPos], targetContinentId });
+        setDrawing({ points: [worldPos], targetContinentId, snapToEdge, snappedEdgeId });
       } else {
-        // Check if clicking near first point to close
+        // 检查是否可以边缘贴合闭合
+        if (drawing.snapToEdge && drawing.snappedEdgeId && drawing.points.length >= 2) {
+          const snapTarget = drawing.snapToEdge === 'continent'
+            ? continents.find(c => c.id === drawing.snappedEdgeId)
+            : regions.find(r => r.id === drawing.snappedEdgeId);
+          
+          if (snapTarget) {
+            const proj = projectPointToEdge(worldPos, snapTarget.bounds.points);
+            if (proj && proj.dist < 20 / viewport.zoom) {
+              // 检查是否回到起点附近（边缘贴合闭合）
+              const startProj = projectPointToEdge(drawing.points[0], snapTarget.bounds.points);
+              if (startProj && (startProj.edgeIndex !== proj.edgeIndex || Math.abs(startProj.t - proj.t) > 0.05)) {
+                // 使用边缘贴合闭合：折线 + 边界线段
+                handleEdgeClosePolygon(drawing, snapTarget.bounds.points, proj);
+                return;
+              }
+            }
+          }
+        }
+
+        // 常规闭合：点击靠近第一个点
         if (drawing.points.length >= 3) {
           const firstPoint = drawing.points[0];
           const dx = worldPos.x - firstPoint.x;
           const dy = worldPos.y - firstPoint.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 15 / viewport.zoom) {
-            // Close polygon
             handleClosePolygon();
             return;
           }
@@ -449,6 +490,43 @@ export function MapView() {
   const handleClosePolygon = () => {
     if (!drawing || drawing.points.length < 3) return;
     setShowDialog(true);
+  };
+
+  // 边缘贴合闭合：使用折线 + 边界线段形成闭合多边形
+  const handleEdgeClosePolygon = (
+    drawingState: DrawingState,
+    boundaryPoints: { x: number; y: number }[],
+    endProjection: { edgeIndex: number; t: number }
+  ) => {
+    if (drawingState.points.length < 2) return;
+
+    // 获取起点在边界上的投影
+    const startProjection = projectPointToEdge(drawingState.points[0], boundaryPoints);
+    if (!startProjection) {
+      handleClosePolygon();
+      return;
+    }
+
+    // 获取边界线段（从起点到终点沿边界正向）
+    const boundarySegment = getBoundarySegment(
+      boundaryPoints,
+      { edgeIndex: startProjection.edgeIndex, t: startProjection.t },
+      { edgeIndex: endProjection.edgeIndex, t: endProjection.t }
+    );
+
+    // 组合多边形：绘制的点 + 边界线段（去掉首尾重复点）
+    const combinedPoints = [
+      ...drawingState.points,
+      ...boundarySegment.slice(1, -1), // 去掉首尾（与绘制点重复）
+    ];
+
+    if (combinedPoints.length >= 3) {
+      // 临时设置组合点为 drawing.points 后打开对话框
+      setDrawing({ ...drawingState, points: combinedPoints });
+      setShowDialog(true);
+    } else {
+      handleClosePolygon();
+    }
   };
 
   const handleDialogSubmit = () => {
@@ -855,4 +933,173 @@ function getCursor(tool: ToolMode): string {
     case 'edit-polygon': return 'move';
     default: return 'default';
   }
+}
+
+// ============================================
+// 边缘贴合辅助函数
+// ============================================
+
+// 点到线段的距离
+function pointToSegmentDistance(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt((p.x - a.x) ** 2 + (p.y - a.y) ** 2);
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const projX = a.x + t * dx;
+  const projY = a.y + t * dy;
+  return Math.sqrt((p.x - projX) ** 2 + (p.y - projY) ** 2);
+}
+
+// 检测点是否在多边形边缘上（距离小于阈值）
+function isPointOnEdge(
+  point: { x: number; y: number },
+  polygon: { x: number; y: number }[],
+  threshold: number = 10
+): boolean {
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length;
+    if (pointToSegmentDistance(point, polygon[i], polygon[j]) < threshold) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// 计算点在边缘上的投影位置（边索引 + 参数 t）
+function projectPointToEdge(
+  point: { x: number; y: number },
+  polygon: { x: number; y: number }[]
+): { edgeIndex: number; t: number; dist: number; point: { x: number; y: number } } | null {
+  let best: { edgeIndex: number; t: number; dist: number; point: { x: number; y: number } } | null = null;
+
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length;
+    const a = polygon[i];
+    const b = polygon[j];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) continue;
+
+    let t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projX = a.x + t * dx;
+    const projY = a.y + t * dy;
+    const dist = Math.sqrt((point.x - projX) ** 2 + (point.y - projY) ** 2);
+
+    if (!best || dist < best.dist) {
+      best = { edgeIndex: i, t, dist, point: { x: projX, y: projY } };
+    }
+  }
+
+  return best;
+}
+
+// 获取多边形边界上两点之间的线段（沿边界正向）
+function getBoundarySegment(
+  polygon: { x: number; y: number }[],
+  start: { edgeIndex: number; t: number },
+  end: { edgeIndex: number; t: number }
+): { x: number; y: number }[] {
+  const segment: { x: number; y: number }[] = [];
+  const n = polygon.length;
+
+  // 添加起点投影
+  const startEdge = polygon[start.edgeIndex];
+  const startNext = polygon[(start.edgeIndex + 1) % n];
+  segment.push({
+    x: startEdge.x + start.t * (startNext.x - startEdge.x),
+    y: startEdge.y + start.t * (startNext.y - startEdge.y),
+  });
+
+  // 沿边界正向走到终点
+  let i = (start.edgeIndex + 1) % n;
+  const endIdx = end.edgeIndex;
+  while (i !== (endIdx + 1) % n) {
+    segment.push(polygon[i]);
+    i = (i + 1) % n;
+  }
+
+  // 添加终点投影
+  const endEdge = polygon[end.edgeIndex];
+  const endNext = polygon[(end.edgeIndex + 1) % n];
+  segment.push({
+    x: endEdge.x + end.t * (endNext.x - endEdge.x),
+    y: endEdge.y + end.t * (endNext.y - endEdge.y),
+  });
+
+  return segment;
+}
+
+// 检测绘制中的多边形是否与大陆边缘相交
+function detectEdgeSnap(
+  drawingPoints: { x: number; y: number }[],
+  targetContinentId: string,
+  continents: Continent[]
+): { type: 'continent'; id: string; start: { edgeIndex: number; t: number }; end: { edgeIndex: number; t: number } } | null {
+  if (drawingPoints.length < 2) return null;
+
+  const continent = continents.find(c => c.id === targetContinentId);
+  if (!continent || continent.bounds.points.length < 3) return null;
+
+  // 检查起点是否在大陆边缘
+  const startProj = projectPointToEdge(drawingPoints[0], continent.bounds.points);
+  if (!startProj || startProj.dist > 15) return null;
+
+  // 检查终点（最后一个点）是否在大陆边缘
+  const lastPoint = drawingPoints[drawingPoints.length - 1];
+  const endProj = projectPointToEdge(lastPoint, continent.bounds.points);
+  if (!endProj || endProj.dist > 15) return null;
+
+  // 确保起点和终点不是同一点
+  if (startProj.edgeIndex === endProj.edgeIndex && Math.abs(startProj.t - endProj.t) < 0.05) return null;
+
+  return {
+    type: 'continent',
+    id: targetContinentId,
+    start: { edgeIndex: startProj.edgeIndex, t: startProj.t },
+    end: { edgeIndex: endProj.edgeIndex, t: endProj.t },
+  };
+}
+
+// 检测绘制中的多边形是否与其他区域边缘相交
+function detectRegionEdgeSnap(
+  drawingPoints: { x: number; y: number }[],
+  targetContinentId: string,
+  regions: Region[]
+): { type: 'region'; id: string; start: { edgeIndex: number; t: number }; end: { edgeIndex: number; t: number } } | null {
+  if (drawingPoints.length < 2) return null;
+
+  // 查找同大陆的其他区域
+  const siblingRegions = regions.filter(
+    r => r.continentId === targetContinentId
+  );
+
+  for (const region of siblingRegions) {
+    if (region.bounds.points.length < 3) continue;
+
+    const startProj = projectPointToEdge(drawingPoints[0], region.bounds.points);
+    if (!startProj || startProj.dist > 15) continue;
+
+    const lastPoint = drawingPoints[drawingPoints.length - 1];
+    const endProj = projectPointToEdge(lastPoint, region.bounds.points);
+    if (!endProj || endProj.dist > 15) continue;
+
+    if (startProj.edgeIndex === endProj.edgeIndex && Math.abs(startProj.t - endProj.t) < 0.05) continue;
+
+    return {
+      type: 'region',
+      id: region.id,
+      start: { edgeIndex: startProj.edgeIndex, t: startProj.t },
+      end: { edgeIndex: endProj.edgeIndex, t: endProj.t },
+    };
+  }
+
+  return null;
 }

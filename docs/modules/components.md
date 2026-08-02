@@ -101,6 +101,57 @@ dialogData: { name, description, terrain }          // 对话框数据
 6. 调用 Store 创建实体
 ```
 
+### 边缘贴合绘制（三种闭合类型）
+
+#### 类型 A - 大陆边缘贴合
+- 点击大陆边缘开始绘制（自动检测边缘）
+- 绘制折线，当折线再次与大陆边缘交汇时自动闭合
+- 闭合路径 = 绘制的折线 + 大陆边界线段
+- 适用：沿大陆边界的区域（沿海省份、边境领地等）
+
+#### 类型 B - 内部多边形
+- 点击大陆内部开始绘制（不在任何边缘上）
+- 手动绘制多边形，点击起点或双击闭合
+- 闭合路径 = 完全由绘制的折线组成
+- 适用：内陆区域（高原、盆地、森林等）
+
+#### 类型 C - 已有区域边缘贴合
+- 点击已有区域的边缘开始绘制
+- 绘制折线，当折线再次与该区域边缘交汇时自动闭合
+- 闭合路径 = 绘制的折线 + 已有区域边界线段
+- 适用：相邻区域的划分
+
+#### 边缘检测逻辑
+- 点击位置距离边缘 < 15px → 触发边缘贴合模式
+- 移动鼠标时实时检测是否靠近边缘
+- 距离边缘 < 20px → 自动闭合
+- `DrawingState.snapToEdge` 记录贴合类型（continent/region）
+- `DrawingState.snappedEdgeId` 记录贴合的实体 ID
+
+### 边缘贴合辅助函数
+
+```typescript
+// 点到线段的距离
+pointToSegmentDistance(p, a, b): number
+
+// 检测点是否在多边形边缘上
+isPointOnEdge(point, polygon, threshold): boolean
+
+// 计算点在边缘上的投影位置（边索引 + 参数 t + 距离）
+projectPointToEdge(point, polygon): { edgeIndex, t, dist, point } | null
+
+// 获取边界上两点之间的线段（沿边界正向）
+getBoundarySegment(polygon, start, end): Point[]
+
+// 检测与大陆边缘的贴合
+detectEdgeSnap(drawingPoints, targetContinentId, continents)
+
+// 检测与其他区域边缘的贴合
+detectRegionEdgeSnap(drawingPoints, targetContinentId, regions)
+
+// 边缘贴合闭合：折线 + 边界线段
+handleEdgeClosePolygon(drawingState, boundaryPoints, endProjection)
+
 ### Canvas 渲染管线
 
 ```typescript
