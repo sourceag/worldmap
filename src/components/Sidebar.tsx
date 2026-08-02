@@ -2,8 +2,47 @@
 // Sidebar 侧边栏
 // ============================================
 
+import { useState } from 'react';
 import { useWorldStore } from '../store/worldStore';
 import '../App.css';
+
+// 可折叠的分区组件
+function CollapsibleSection({
+  title,
+  count,
+  collapsed,
+  onToggle,
+  onAdd,
+  children,
+}: {
+  title: string;
+  count?: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  onAdd?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="sidebar-section">
+      <div className="sidebar-section-title">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            className={`sidebar-collapse-btn ${collapsed ? 'collapsed' : ''}`}
+            onClick={onToggle}
+            title={collapsed ? '展开' : '收起'}
+          >
+            ▼
+          </button>
+          <span>{title}{count !== undefined && ` (${count})`}</span>
+        </div>
+        {onAdd && (
+          <button onClick={onAdd} title={`添加${title}`}>+</button>
+        )}
+      </div>
+      {!collapsed && children}
+    </div>
+  );
+}
 
 export function Sidebar({ style }: { style?: React.CSSProperties }) {
   const {
@@ -24,6 +63,12 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
     createEvent,
     createCharacter,
   } = useWorldStore();
+
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (key: string) => {
+    setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   if (!world) return null;
 
@@ -116,11 +161,13 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
       <div className="sidebar-header">世界结构</div>
       <div className="sidebar-content">
         {/* Continents & Regions (嵌套显示) */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>大陆 ({continents.length})</span>
-            <button onClick={handleCreateContinent} title="添加大陆">+</button>
-          </div>
+        <CollapsibleSection
+          title="大陆"
+          count={continents.length}
+          collapsed={!!collapsedSections.continents}
+          onToggle={() => toggleSection('continents')}
+          onAdd={handleCreateContinent}
+        >
           {continents.map((c) => {
             const continentRegions = regions.filter(r => r.continentId === c.id);
             return (
@@ -151,14 +198,15 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
               </div>
             );
           })}
-        </div>
+        </CollapsibleSection>
 
         {/* 未分配大陆的区域 */}
         {regions.filter(r => !r.continentId || !continents.find(c => c.id === r.continentId)).length > 0 && (
-          <div className="sidebar-section">
-            <div className="sidebar-section-title">
-              <span>未分配区域</span>
-            </div>
+          <CollapsibleSection
+            title="未分配区域"
+            collapsed={!!collapsedSections.unassignedRegions}
+            onToggle={() => toggleSection('unassignedRegions')}
+          >
             {regions.filter(r => !r.continentId || !continents.find(c => c.id === r.continentId)).map((r) => (
               <div
                 key={r.id}
@@ -169,15 +217,17 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
                 {r.name}
               </div>
             ))}
-          </div>
+          </CollapsibleSection>
         )}
 
         {/* Locations */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>地点 ({locations.length})</span>
-            <button onClick={handleCreateLocation} title="添加地点">+</button>
-          </div>
+        <CollapsibleSection
+          title="地点"
+          count={locations.length}
+          collapsed={!!collapsedSections.locations}
+          onToggle={() => toggleSection('locations')}
+          onAdd={handleCreateLocation}
+        >
           {locations.map((l) => (
             <div
               key={l.id}
@@ -188,14 +238,16 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
               {l.name}
             </div>
           ))}
-        </div>
+        </CollapsibleSection>
 
         {/* Factions */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>势力 ({factions.length})</span>
-            <button onClick={handleCreateFaction} title="添加势力">+</button>
-          </div>
+        <CollapsibleSection
+          title="势力"
+          count={factions.length}
+          collapsed={!!collapsedSections.factions}
+          onToggle={() => toggleSection('factions')}
+          onAdd={handleCreateFaction}
+        >
           {factions.map((f) => (
             <div
               key={f.id}
@@ -206,14 +258,16 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
               {f.name}
             </div>
           ))}
-        </div>
+        </CollapsibleSection>
 
         {/* Events */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>事件 ({events.length})</span>
-            <button onClick={handleCreateEvent} title="添加事件">+</button>
-          </div>
+        <CollapsibleSection
+          title="事件"
+          count={events.length}
+          collapsed={!!collapsedSections.events}
+          onToggle={() => toggleSection('events')}
+          onAdd={handleCreateEvent}
+        >
           {events.map((e) => (
             <div
               key={e.id}
@@ -224,14 +278,16 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
               {e.name}
             </div>
           ))}
-        </div>
+        </CollapsibleSection>
 
         {/* Characters */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>人物 ({characters.length})</span>
-            <button onClick={handleCreateCharacter} title="添加人物">+</button>
-          </div>
+        <CollapsibleSection
+          title="人物"
+          count={characters.length}
+          collapsed={!!collapsedSections.characters}
+          onToggle={() => toggleSection('characters')}
+          onAdd={handleCreateCharacter}
+        >
           {characters.map((c) => (
             <div
               key={c.id}
@@ -242,7 +298,7 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
               {c.name}
             </div>
           ))}
-        </div>
+        </CollapsibleSection>
       </div>
     </aside>
   );
