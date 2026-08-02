@@ -239,10 +239,21 @@ export function MapView() {
     draw();
   }, [draw]);
 
+  // 使用 ResizeObserver 监听容器大小变化（包括侧边栏拖拽调整）
   useEffect(() => {
-    const handleResize = () => draw();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // 使用 requestAnimationFrame 节流，避免频繁重绘
+      requestAnimationFrame(() => draw());
+    });
+
+    resizeObserver.observe(parent);
+    return () => resizeObserver.disconnect();
   }, [draw]);
 
   const handleWheel = (e: React.WheelEvent) => {
