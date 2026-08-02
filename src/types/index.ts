@@ -122,11 +122,10 @@ export interface WorldEvent {
   worldId: ID;
   name: string;
   type: EventType;
-  ageId: ID;
+  regionIds: ID[];       // 关联的区域（多对多）
   startDate: TimelineDate;
   endDate?: TimelineDate;
   description: string;
-  locationId?: ID;
   participants: ID[];
   causes: ID[];
   effects: ID[];

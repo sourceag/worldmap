@@ -21,6 +21,8 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
     updateFaction,
     updateEvent,
     updateCharacter,
+    createEvent,
+    selectEntity,
     cascadeDeleteContinent,
     cascadeDeleteRegion,
     deleteLocation,
@@ -146,6 +148,7 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
       case 'region': {
         const region = regions.find((r) => r.id === selectedEntityId);
         if (!region) return null;
+        const regionEvents = events.filter(e => e.regionIds.includes(region.id));
         return (
           <div>
             <div className="form-group">
@@ -199,6 +202,64 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
                 onChange={(e) => updateRegion(region.id, { resources: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
               />
             </div>
+
+            {/* 区域事件列表 */}
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label className="form-label" style={{ margin: 0 }}>区域事件 ({regionEvents.length})</label>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '2px 10px', fontSize: '12px' }}
+                  onClick={() => {
+                    const name = prompt('事件名称:');
+                    if (name) {
+                      const yearStr = prompt('发生年份:', '0');
+                      const year = parseInt(yearStr || '0') || 0;
+                      createEvent({
+                        name,
+                        type: 'other',
+                        regionIds: [region.id],
+                        startDate: { year, displayString: `${year}年` },
+                        description: '',
+                        participants: [],
+                        causes: [],
+                        effects: [],
+                      });
+                    }
+                  }}
+                >
+                  + 添加事件
+                </button>
+              </div>
+              {regionEvents.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {regionEvents.sort((a, b) => a.startDate.year - b.startDate.year).map((event) => (
+                    <div
+                      key={event.id}
+                      style={{
+                        padding: '8px 10px',
+                        backgroundColor: 'var(--color-bg-primary)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        border: selectedEntityId === event.id ? '2px solid var(--color-accent)' : '1px solid var(--color-border)',
+                        fontSize: '12px',
+                      }}
+                      onClick={() => selectEntity('event', event.id)}
+                    >
+                      <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{event.name}</span>
+                        <span style={{ opacity: 0.6 }}>{event.startDate.displayString}</span>
+                      </div>
+                      <div style={{ opacity: 0.5, marginTop: '2px' }}>{event.type}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {regionEvents.length === 0 && (
+                <div style={{ fontSize: '12px', opacity: 0.5, padding: '8px' }}>暂无事件</div>
+              )}
+            </div>
+
             <button className="btn btn-danger" onClick={handleDelete}>
               删除区域
             </button>
@@ -337,6 +398,7 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
       case 'event': {
         const event = events.find((e) => e.id === selectedEntityId);
         if (!event) return null;
+        const eventRegions = regions.filter(r => event.regionIds.includes(r.id));
         return (
           <div>
             <div className="form-group">
@@ -368,12 +430,38 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
               </select>
             </div>
             <div className="form-group">
+              <label className="form-label">发生年份</label>
+              <input
+                className="form-input"
+                type="number"
+                value={event.startDate.year}
+                onChange={(e) => {
+                  const year = parseInt(e.target.value) || 0;
+                  updateEvent(event.id, { startDate: { ...event.startDate, year, displayString: `${year}年` } });
+                }}
+              />
+            </div>
+            <div className="form-group">
               <label className="form-label">描述</label>
               <textarea
                 className="form-input form-textarea"
                 value={event.description}
                 onChange={(e) => updateEvent(event.id, { description: e.target.value })}
               />
+            </div>
+            <div className="form-group">
+              <label className="form-label">关联区域</label>
+              {eventRegions.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {eventRegions.map(r => (
+                    <span key={r.id} style={{ padding: '2px 8px', backgroundColor: 'var(--color-bg-tertiary)', borderRadius: '4px', fontSize: '12px' }}>
+                      {r.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '12px', opacity: 0.5 }}>未关联区域</div>
+              )}
             </div>
             <button className="btn btn-danger" onClick={handleDelete}>
               删除事件

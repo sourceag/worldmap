@@ -6,9 +6,16 @@ import { useWorldStore } from '../store/worldStore';
 import '../App.css';
 
 export function TimelineView() {
-  const { events, eras, ages, factions, selectedEntityId, selectEntity } = useWorldStore();
+  const { events, eras, regions, selectedEntityId, selectEntity } = useWorldStore();
 
   const sortedEvents = [...events].sort((a, b) => a.startDate.year - b.startDate.year);
+
+  const getRegionNames = (regionIds: string[]): string => {
+    return regionIds
+      .map(id => regions.find(r => r.id === id)?.name)
+      .filter(Boolean)
+      .join(', ');
+  };
 
   return (
     <div className="timeline-view">
@@ -43,7 +50,7 @@ export function TimelineView() {
         {sortedEvents.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">📜</div>
-            <div className="empty-state-text">暂无事件，请在左侧添加</div>
+            <div className="empty-state-text">暂无事件，请在区域属性中添加</div>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '16px', paddingTop: '240px', overflowX: 'auto' }}>
@@ -65,15 +72,15 @@ export function TimelineView() {
                 </div>
                 <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{event.name}</div>
                 <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '8px' }}>{event.type}</div>
+                {event.regionIds.length > 0 && (
+                  <div style={{ fontSize: '11px', opacity: 0.5, marginBottom: '4px' }}>
+                    📍 {getRegionNames(event.regionIds)}
+                  </div>
+                )}
                 <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                   {event.description.substring(0, 50)}
                   {event.description.length > 50 ? '...' : ''}
                 </div>
-                {event.participants.length > 0 && (
-                  <div style={{ marginTop: '8px', fontSize: '11px', opacity: 0.5 }}>
-                    参与方: {event.participants.length}
-                  </div>
-                )}
               </div>
             ))}
           </div>
