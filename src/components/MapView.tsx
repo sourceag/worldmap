@@ -356,6 +356,7 @@ export function MapView() {
         let targetContinentId: string | undefined;
         let snapToEdge: 'continent' | 'region' | undefined;
         let snappedEdgeId: string | undefined;
+        let startPoint = worldPos; // 记录投影后的起点
 
         if (tool === 'draw-region') {
           // 查找点击的大陆
@@ -375,18 +376,24 @@ export function MapView() {
           if (isPointOnEdge(worldPos, continent.bounds.points, 15 / viewport.zoom)) {
             snapToEdge = 'continent';
             snappedEdgeId = targetContinentId;
+            // 将起点投影到边缘上
+            const proj = projectPointToEdge(worldPos, continent.bounds.points);
+            if (proj) startPoint = proj.point;
           } else {
             // 检测是否点击在其他区域边缘
             for (const region of regions) {
               if (region.continentId === targetContinentId && isPointOnEdge(worldPos, region.bounds.points, 15 / viewport.zoom)) {
                 snapToEdge = 'region';
                 snappedEdgeId = region.id;
+                // 将起点投影到边缘上
+                const proj = projectPointToEdge(worldPos, region.bounds.points);
+                if (proj) startPoint = proj.point;
                 break;
               }
             }
           }
         }
-        setDrawing({ points: [worldPos], targetContinentId, snapToEdge, snappedEdgeId });
+        setDrawing({ points: [startPoint], targetContinentId, snapToEdge, snappedEdgeId });
       } else {
         // 检查是否可以边缘贴合闭合
         if (drawing.snapToEdge && drawing.snappedEdgeId && drawing.points.length >= 2) {
@@ -499,16 +506,25 @@ export function MapView() {
   const handleEdgeClosePolygon = (
     drawingState: DrawingState,
     boundaryPoints: { x: number; y: number }[],
-    endProjection: { edgeIndex: number; t: number }
+    endProjection: { edgeIndex: number; t: number; dist: number; point: { x: number; y: number } }
   ) => {
     if (drawingState.points.length < 2) return;
 
-    // 获取起点在边界上的投影
+    // 起点已经是投影点（在绘制时已处理），获取其投影信息
     const startProjection = projectPointToEdge(drawingState.points[0], boundaryPoints);
     if (!startProjection) {
       handleClosePolygon();
       return;
     }
+
+    // 计算投影终点（落在边缘上的精确点）
+    const projEndPoint = endProjection.point;
+
+    // 构建新的点数组：替换最后一个点为投影终点
+    const drawnPointsProjected = [
+      ...drawingState.points.slice(0, -1), // 除最后一个外的所有点
+      projEndPoint, // 使用投影终点替换
+    ];
 
     // 计算两个可能的边界线段（正向和反向）
     const forwardSegment = getBoundarySegment(
@@ -522,13 +538,14 @@ export function MapView() {
       { edgeIndex: startProjection.edgeIndex, t: startProjection.t }
     );
 
-    // 组合两个可能的多边形
+    // 组合两个可能的多边形：
+    // 折线（起点和终点都已投影到边缘） + 边界线段（不含首尾重复点）
     const polygonA = [
-      ...drawingState.points,
-      ...forwardSegment.slice(1, -1),
+      ...drawnPointsProjected,
+      ...forwardSegment.slice(1, -1), // 去掉首尾（与折线端点重复）
     ];
     const polygonB = [
-      ...drawingState.points,
+      ...drawnPointsProjected,
       ...reverseSegment.slice(1, -1),
     ];
 
