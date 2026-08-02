@@ -4,18 +4,26 @@
 
 ## App.tsx — 应用入口
 
-**文件**: `src/App.tsx` (115 行)
+**文件**: `src/App.tsx` (165 行)
 
-应用根组件，负责初始化、持久化触发和布局。
+应用根组件，负责初始化、持久化触发、布局和可调整面板。
 
 ```typescript
 function App() {
   const { world, activeView, saveToStorage, loadFromStorage } = useWorldStore();
   const { toast } = useUndoRedo();
   
+  // 面板宽度状态
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [propertiesWidth, setPropertiesWidth] = useState(320);
+  
+  // 拖拽状态（使用 ref 避免频繁渲染）
+  const dragRef = useRef({ type, startX, startWidth });
+  
   // 启动时从 IndexedDB 加载数据
   // 注册内置插件
   // 数据变化时自动保存（防抖 500ms）
+  // 全局 mousemove/mouseup 处理拖拽
 }
 ```
 
@@ -23,11 +31,30 @@ function App() {
 ```
 ┌─────────────────────────────────────────────┐
 │                  Navbar                     │
-├──────────┬──────────────────────┬───────────┤
-│ Sidebar  │     Main Canvas      │ Properties│
-│          │  (Map/Timeline/...)  │   Panel   │
-└──────────┴──────────────────────┴───────────┘
+├──────────┬───┬──────────────────────┬───┤
+│ Sidebar  │ ║ │     Main Canvas      │ ║ │ Properties │
+│ (可拖拽) │ ║ │  (Map/Timeline/...)  │ ║ │  (可拖拽)  │
+└──────────┴───┴──────────────────────┴───┘
 ```
+其中 `║` 为拖拽手柄 (resize-handle)
+
+### 可调整面板
+
+| 面板 | 默认宽度 | 最小宽度 | 最大宽度 |
+|---|---|---|---|
+| Sidebar | 260px | 180px | 500px |
+| Properties | 320px | 220px | 600px |
+
+**拖拽交互**:
+- 拖拽左侧手柄调整 Sidebar 宽度
+- 拖拽右侧手柄调整 Properties 宽度
+- Main Canvas 自动填充剩余空间
+- 拖拽时手柄高亮显示
+
+**实现细节**:
+- 使用 `useRef` 存储拖拖拽状态，避免拖拽过程中频繁触发 React 渲染
+- `window.addEventListener('mousemove')` 全局监听拖拽
+- 拖拽时通过 `setSidebarWidth` / `setPropertiesWidth` 更新宽度
 
 **自动保存触发条件**: world, continents, regions, locations, routes, eras, ages, events, factions, characters 任一变化。
 
@@ -120,9 +147,16 @@ worldToScreen(worldX, worldY) → { x: number, y: number }
 
 ## Sidebar.tsx — 侧边栏
 
-**文件**: `src/components/Sidebar.tsx` (120 行)
+**文件**: `src/components/Sidebar.tsx` (228 行)
 
-实体树形列表，支持快速创建和选择。
+实体树形列表，支持快速创建和选择。接受 `style`  prop 以支持动态宽度调整。
+
+```typescript
+export function Sidebar({ style }: { style?: React.CSSProperties }) {
+  // ...
+  return <aside className="sidebar" style={style}>...</aside>;
+}
+```
 
 ```typescript
 // 按类型分组显示
@@ -142,9 +176,16 @@ sections = [
 
 ## PropertiesPanel.tsx — 属性面板
 
-**文件**: `src/components/PropertiesPanel.tsx` (360 行)
+**文件**: `src/components/PropertiesPanel.tsx` (426 行)
 
-根据选中实体类型渲染不同表单。
+根据选中实体类型渲染不同表单。接受 `style` prop 以支持动态宽度调整。
+
+```typescript
+export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
+  // ...
+  return <aside className="properties-panel" style={style}>...</aside>;
+}
+```
 
 **支持的编辑**:
 
@@ -289,4 +330,45 @@ useEffect(() => {
 
 // UI: 如果有已有数据，显示"恢复上次的世界"
 //     否则显示创建表单（世界名称 + 描述）
+```
+
+---
+
+## CSS — 拖拽调整手柄
+
+**文件**: `src/App.css`
+
+```css
+/* 拖拽调整手柄 */
+.resize-handle {
+  width: 5px;
+  cursor: col-resize;
+  background-color: var(--color-border);
+  transition: background-color 0.15s ease;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background-color: var(--color-accent);  /* 悬停时高亮 */
+}
+```
+
+**布局约束**:
+```css
+.sidebar {
+  flex-shrink: 0;      /* 防止被压缩 */
+  min-width: 180px;    /* 最小宽度 */
+}
+
+.properties-panel {
+  flex-shrink: 0;
+  min-width: 220px;
+}
+
+.main-canvas {
+  flex: 1;             /* 自动填充剩余空间 */
+  min-width: 0;
+}
 ```

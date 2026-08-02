@@ -2,7 +2,7 @@
 // App 主组件
 // ============================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useWorldStore } from './store/worldStore';
 import { registerBuiltInPlugins } from './plugins';
 import { useUndoRedo } from './hooks/useUndoRedo';
@@ -17,11 +17,28 @@ import { PropertiesPanel } from './components/PropertiesPanel';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import './App.css';
 
+// 面板最小宽度常量
+const MIN_SIDEBAR_WIDTH = 180;
+const MIN_PROPERTIES_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 500;
+const MAX_PROPERTIES_WIDTH = 600;
+
 function App() {
   const { world, activeView, saveToStorage, loadFromStorage } = useWorldStore();
   const [pluginsRegistered, setPluginsRegistered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useUndoRedo();
+
+  // 面板宽度状态
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [propertiesWidth, setPropertiesWidth] = useState(320);
+
+  // 拖拽状态（使用 ref 避免频繁渲染）
+  const dragRef = useRef<{
+    type: 'sidebar' | 'properties';
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   // 启动时加载数据
   useEffect(() => {
@@ -45,7 +62,7 @@ function App() {
     if (world) {
       const timeoutId = setTimeout(() => {
         saveToStorage();
-      }, 500); // 防抖 500ms
+      }, 500);
       return () => clearTimeout(timeoutId);
     }
   }, [
@@ -61,6 +78,44 @@ function App() {
     useWorldStore.getState().characters,
     saveToStorage,
   ]);
+
+  // 拖拽处理
+  const handleMouseDown = useCallback((type: 'sidebar' | 'properties') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = {
+      type,
+      startX: e.clientX,
+      startWidth: type === 'sidebar' ? sidebarWidth : propertiesWidth,
+    };
+  }, [sidebarWidth, propertiesWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+
+      const { type, startX, startWidth } = dragRef.current;
+      const delta = e.clientX - startX;
+
+      if (type === 'sidebar') {
+        const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, startWidth + delta));
+        setSidebarWidth(newWidth);
+      } else {
+        const newWidth = Math.max(MIN_PROPERTIES_WIDTH, Math.min(MAX_PROPERTIES_WIDTH, startWidth - delta));
+        setPropertiesWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      dragRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -103,11 +158,19 @@ function App() {
     <div className="app">
       <Navbar />
       <div className="app-body">
-        <Sidebar />
+        <Sidebar style={{ width: sidebarWidth }} />
+        <div
+          className="resize-handle resize-handle-sidebar"
+          onMouseDown={handleMouseDown('sidebar')}
+        />
         <main className="main-canvas">
           {renderView()}
         </main>
-        <PropertiesPanel />
+        <div
+          className="resize-handle resize-handle-properties"
+          onMouseDown={handleMouseDown('properties')}
+        />
+        <PropertiesPanel style={{ width: propertiesWidth }} />
       </div>
       {toast && (
         <div className="undo-toast">

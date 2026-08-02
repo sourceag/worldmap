@@ -5,7 +5,7 @@
 import { useWorldStore } from '../store/worldStore';
 import '../App.css';
 
-export function PropertiesPanel() {
+export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
   const {
     selectedEntityType,
     selectedEntityId,
@@ -93,7 +93,7 @@ export function PropertiesPanel() {
 
   if (!selectedEntityType || !selectedEntityId) {
     return (
-      <aside className="properties-panel">
+      <aside className="properties-panel" style={style}>
         <div className="properties-panel-header">属性</div>
         <div className="properties-panel-content">
           <div className="empty-state">
@@ -414,7 +414,7 @@ export function PropertiesPanel() {
   };
 
   return (
-    <aside className="properties-panel">
+    <aside className="properties-panel" style={style}>
       <div className="properties-panel-header">
         {selectedEntityType ? `${selectedEntityType}` : '属性'}
       </div>

@@ -5,7 +5,7 @@
 import { useWorldStore } from '../store/worldStore';
 import '../App.css';
 
-export function Sidebar() {
+export function Sidebar({ style }: { style?: React.CSSProperties }) {
   const {
     world,
     continents,
@@ -112,7 +112,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={style}>
       <div className="sidebar-header">世界结构</div>
       <div className="sidebar-content">
         {/* Continents */}
