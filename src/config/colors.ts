@@ -1,6 +1,36 @@
 // ============================================
-// 地图画布颜色配置
+// 完整主题配置 — 项目唯一颜色源
 // ============================================
+
+// === 基础主题变量（对应 CSS custom properties） ===
+
+export const Theme = {
+  // 背景色（三层深度）
+  bgPrimary: '#1a1a2e',
+  bgSecondary: '#16213e',
+  bgTertiary: '#0f3460',
+
+  // 文字色
+  textPrimary: '#e4e4e7',
+  textSecondary: '#a1a1aa',
+
+  // 交互色
+  accent: '#e94560',
+  accentHover: '#ff6b6b',
+  border: '#2d2d44',
+
+  // 语义色
+  success: '#10b981',
+  warning: '#f59e0b',
+  error: '#ef4444',
+
+  // 尺寸
+  sidebarWidth: 260,
+  panelWidth: 320,
+  navbarHeight: 48,
+} as const;
+
+// === Canvas 绘制颜色 ===
 
 export const CanvasColors = {
   // 大陆
@@ -8,14 +38,14 @@ export const CanvasColors = {
     fill: 'rgba(30, 41, 59, 0.6)',
     stroke: '#475569',
     strokeSelected: '#3b82f6',
-    label: '#e4e4e7',
+    label: Theme.textPrimary,
   },
 
   // 区域
   region: {
     stroke: '#334155',
-    strokeSelected: '#e94560',
-    strokeEditing: '#e94560',
+    strokeSelected: Theme.accent,
+    strokeEditing: Theme.accent,
     strokeBelongsToTarget: '#60a5fa',
     label: '#cbd5e1',
   },
@@ -23,28 +53,28 @@ export const CanvasColors = {
   // 地点
   location: {
     fill: '#3b82f6',
-    fillSelected: '#e94560',
+    fillSelected: Theme.accent,
     stroke: '#1e293b',
-    label: '#e4e4e7',
+    label: Theme.textPrimary,
   },
 
   // 正在绘制的多边形
   drawing: {
-    line: '#e94560',
-    vertex: '#e94560',
-    firstVertex: '#10b981', // 第一个点（可闭合时变绿）
-    closeHint: '#10b981',  // 靠近起点时的提示圈
+    line: Theme.accent,
+    vertex: Theme.accent,
+    firstVertex: Theme.success, // 第一个点（可闭合时变绿）
+    closeHint: Theme.success,  // 靠近起点时的提示圈
   },
 
   // 编辑模式
   edit: {
-    vertexHandle: '#e94560',
+    vertexHandle: Theme.accent,
     vertexHandleStroke: '#fff',
   },
 
   // 遮罩
   mask: {
-    nonTargetContinent: 'rgba(0, 0, 0, 0.4)', // 绘制区域模式下非目标大陆的遮罩
+    nonTargetContinent: 'rgba(0, 0, 0, 0.4)',
   },
 
   // 网格
@@ -53,9 +83,7 @@ export const CanvasColors = {
   },
 } as const;
 
-// ============================================
-// 地形颜色配置
-// ============================================
+// === 地形颜色 ===
 
 export const TerrainColors: Record<string, string> = {
   plains: 'rgba(101, 163, 13, 0.25)',      // 平原 - 草绿
@@ -80,9 +108,7 @@ export const TerrainColors: Record<string, string> = {
 
 export const DEFAULT_TERRAIN_COLOR = 'rgba(100, 116, 139, 0.15)';
 
-// ============================================
-// 地形标签配置
-// ============================================
+// === 地形标签 ===
 
 export const TerrainLabels: Record<string, string> = {
   plains: '🌾 平原',
@@ -106,3 +132,36 @@ export const TerrainLabels: Record<string, string> = {
 };
 
 export const DEFAULT_TERRAIN_LABEL = '未知地形';
+
+// === CSS 变量注入 ===
+
+// 将主题配置映射为 CSS custom properties
+const cssVariableMap: Record<string, string> = {
+  '--color-bg-primary': Theme.bgPrimary,
+  '--color-bg-secondary': Theme.bgSecondary,
+  '--color-bg-tertiary': Theme.bgTertiary,
+  '--color-text-primary': Theme.textPrimary,
+  '--color-text-secondary': Theme.textSecondary,
+  '--color-accent': Theme.accent,
+  '--color-accent-hover': Theme.accentHover,
+  '--color-border': Theme.border,
+  '--color-success': Theme.success,
+  '--color-warning': Theme.warning,
+  '--color-error': Theme.error,
+  '--sidebar-width': `${Theme.sidebarWidth}px`,
+  '--panel-width': `${Theme.panelWidth}px`,
+  '--navbar-height': `${Theme.navbarHeight}px`,
+};
+
+let injected = false;
+
+/** 注入 CSS 变量到 document.documentElement（只需调用一次） */
+export function injectCSSVariables(): void {
+  if (injected || typeof document === 'undefined') return;
+  
+  const root = document.documentElement;
+  for (const [name, value] of Object.entries(cssVariableMap)) {
+    root.style.setProperty(name, value);
+  }
+  injected = true;
+}

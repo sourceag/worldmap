@@ -4,22 +4,8 @@
   box-sizing: border-box;
 }
 
-:root {
-  --color-bg-primary: #1a1a2e;
-  --color-bg-secondary: #16213e;
-  --color-bg-tertiary: #0f3460;
-  --color-text-primary: #e4e4e7;
-  --color-text-secondary: #a1a1aa;
-  --color-accent: #e94560;
-  --color-accent-hover: #ff6b6b;
-  --color-border: #2d2d44;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-  --sidebar-width: 260px;
-  --panel-width: 320px;
-  --navbar-height: 48px;
-}
+/* 注意：CSS 变量定义已移至 src/config/colors.ts，由 injectCSSVariables() 运行时注入 */
+/* 此处保留纯布局/结构样式 */
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

@@ -261,8 +261,7 @@ const handleWheel = (e) => {
        ▼
 闭合方式：
   ├─ 双击
-  ├─ 点击靠近第一个点（< 15px）
-  └─ 边缘贴合闭合（详见下文）
+  └─ 点击靠近第一个点（< 15px）
        │
        ▼
 弹出对话框 → 填写名称/描述/地形 → 创建
@@ -286,64 +285,7 @@ if (dist < 15 / viewport.zoom) {
 }
 ```
 
-### 4. 边缘贴合 (Edge Snap)
-
-这是 MapView 最复杂的特性，允许绘制区域时**沿着已有边界精确贴合**。
-
-#### 4.1 检测逻辑
-
-```
-首次点击绘制区域时：
-  │
-  ├─ 检查是否在某个大陆边缘上 → snapToEdge = 'continent'
-  │
-  ├─ 检查是否在某个区域边缘上 → snapToEdge = 'region'
-  │
-  └─ 都不在 → snapToEdge = undefined（普通模式）
-```
-
-#### 4.2 关键点投影
-
-```
-首次点击边缘时：
-  1. 检测点击位置距离边缘 < 15px
-  2. 将点击坐标投影到边缘上 → 记录为精确的边缘点
-  3. 存储在 drawing.points[0]（世界坐标）
-
-闭合时（终点靠近边缘）：
-  1. 将终点投影到边缘上 → 得到精确投影点
-  2. 替换最后一个绘制点为投影终点
-  3. 确保折线两端都精确落在边缘上
-```
-
-#### 4.3 边缘贴合闭合
-
-当用户画的折线两端都在边界上时，使用 `handleEdgeClosePolygon` 组合多边形：
-
-```
-用户画的折线（已投影）:  P1 → P2 → P3
-                               ↓       ↓
-                          精确边缘点   精确边缘点
-
-大陆的边界提供两条路径：
-  正向: P3 → A → B → P1  (多边形 A)
-  反向: P3 → C → D → P1  (多边形 B)
-
-弹出选择框让用户选 A 或 B
-```
-
-#### 4.4 相关辅助函数
-
-| 函数 | 作用 |
-|------|------|
-| `isPointOnEdge(point, polygon, threshold)` | 检测点是否在多边形边缘上 |
-| `projectPointToEdge(point, polygon)` | 计算点在边缘上的投影位置 |
-| `getBoundarySegment(polygon, start, end)` | 获取边界上两点之间的线段 |
-| `pointToSegmentDistance(p, a, b)` | 点到线段的距离 |
-| `detectEdgeSnap(...)` | 检测绘制中的多边形是否与大陆边缘相交 |
-| `detectRegionEdgeSnap(...)` | 检测绘制中的多边形是否与其他区域边缘相交 |
-
-### 5. 选择 (Select)
+### 4. 选择 (Select)
 
 点击时按优先级检测：
 
@@ -354,7 +296,7 @@ if (dist < 15 / viewport.zoom) {
 4. 都没选中 → 不做操作
 ```
 
-### 6. 添加地点
+### 5. 添加地点
 
 ```typescript
 if (tool === 'add-location') {
@@ -371,7 +313,7 @@ if (tool === 'add-location') {
 }
 ```
 
-### 7. 编辑多边形
+### 6. 编辑多边形
 
 ```
 选中大陆/区域 → 点击"编辑形状"
@@ -383,7 +325,7 @@ if (tool === 'add-location') {
 点击"完成编辑" 或 切换回"选择"模式
 ```
 
-### 8. 删除实体
+### 7. 删除实体
 
 ```typescript
 const handleDeleteSelected = () => {
@@ -424,15 +366,6 @@ const handleDeleteSelected = () => {
 | `getTerrainColor(terrain)` | 地形类型 → 填充颜色映射 |
 | `getTerrainLabel(terrain)` | 地形类型 → 显示标签映射 |
 | `getCursor(tool)` | 工具模式 → 鼠标光标样式 |
-
-### 边缘贴合类
-
-| 函数 | 作用 |
-|------|------|
-| `pointToSegmentDistance(p, a, b)` | 点到线段的距离 |
-| `isPointOnEdge(point, polygon, threshold)` | 点是否在多边形边缘上 |
-| `projectPointToEdge(point, polygon)` | 点在边缘上的投影（最近点） |
-| `getBoundarySegment(polygon, start, end)` | 边界上两点间的线段点集 |
 
 ---
 
@@ -485,7 +418,6 @@ const handleDeleteSelected = () => {
       {tool === 'draw-region' && (
         <select value={dialogData.terrain}>
           <option value="plains">🌾 平原</option>
-          <option value="mountains">⛰️ 山脉</option>
           <!-- ... 18 种地形 -->
         </select>
       )}
@@ -496,24 +428,24 @@ const handleDeleteSelected = () => {
 )}
 ```
 
-### 区域选择对话框（边缘贴合时使用）
+---
+
+## 颜色配置
+
+所有地图绘制颜色和全局主题变量由 `src/config/colors.ts` 统一管理：
 
 ```typescript
-{showRegionPicker && regionPickerOptions.length >= 2 && (
-  <div className="map-dialog-overlay">
-    <div className="map-dialog">
-      <h3>🎯 选择区域</h3>
-      <p>折线将边界分为两部分，请选择要创建的区域：</p>
-      {regionPickerOptions.map((polygon, index) => (
-        <button onClick={() => handleRegionPickerSelect(index)}>
-          {index === 0 ? '◀' : '▶'} 区域 {index === 0 ? 'A' : 'B'}
-          <div>{Math.round(polygonArea(polygon))} 平方像素</div>
-        </button>
-      ))}
-    </div>
-  </div>
-)}
+import { CanvasColors, TerrainColors, DEFAULT_TERRAIN_COLOR, Theme } from '../config/colors';
 ```
+
+| 配置模块 | 作用 |
+|---------|------|
+| `Theme` | 全局主题变量（背景、文字、边框、强调色、尺寸） |
+| `CanvasColors` | 大陆、区域、地点、绘制中多边形、编辑模式、遮罩、网格颜色 |
+| `TerrainColors` | 18 种地形填充色 |
+| `injectCSSVariables()` | 将 Theme 注入为 CSS custom properties |
+
+修改颜色只需编辑 `src/config/colors.ts`，无需修改组件代码。
 
 ---
 
@@ -562,10 +494,10 @@ const {
 import type { Continent, Region, Location, TerrainType } from '../types';
 ```
 
-### 从 PolygonClip 导入
+### 从 colors 配置导入
 
 ```typescript
-import { polygonArea } from '../core/PolygonClip';  // 计算多边形面积
+import { CanvasColors, TerrainColors, DEFAULT_TERRAIN_COLOR } from '../config/colors';
 ```
 
 ---
@@ -594,5 +526,5 @@ MapView 是一个**自包含的 Canvas 地图编辑器**，核心设计思路：
 1. **数据驱动渲染** — Store 数据变化 → 自动重绘
 2. **工具模式切换** — 一个组件支持 6 种交互模式
 3. **坐标变换系统** — viewport 状态统一管理平移缩放
-4. **边缘贴合算法** — 几何计算实现精确的边界对齐绘制
-5. **分层绘制** — 背景 → 网格 → 大陆 → 区域 → 地点 → 预览 → 控制点
+4. **分层绘制** — 背景 → 网格 → 大陆 → 区域 → 地点 → 预览 → 控制点
+5. **配置驱动颜色** — 所有颜色由 `src/config/colors.ts` 统一管理
