@@ -80,13 +80,10 @@ export function MapView() {
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    // 绘制缓冲区严格匹配 CSS 尺寸，防止溢出
+    // 绘制缓冲区匹配当前显示尺寸（CSS 控制显示大小，无需设置 style）
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor(rect.height * dpr);
-    // 确保 CSS 尺寸严格限制
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
 
     // 先重置变换，清除整个画布
     ctx.setTransform(1, 0, 0, 1, 0, 0);
