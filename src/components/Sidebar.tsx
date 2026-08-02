@@ -12,14 +12,12 @@ function CollapsibleSection({
   count,
   collapsed,
   onToggle,
-  onAdd,
   children,
 }: {
   title: string;
   count?: number;
   collapsed: boolean;
   onToggle: () => void;
-  onAdd?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -35,9 +33,6 @@ function CollapsibleSection({
           </button>
           <span>{title}{count !== undefined && ` (${count})`}</span>
         </div>
-        {onAdd && (
-          <button onClick={onAdd} title={`添加${title}`}>+</button>
-        )}
       </div>
       {!collapsed && children}
     </div>
@@ -56,12 +51,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
     selectedEntityType,
     selectedEntityId,
     selectEntity,
-    createContinent,
-    createRegion,
-    createLocation,
-    createFaction,
-    createEvent,
-    createCharacter,
   } = useWorldStore();
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -71,90 +60,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
   };
 
   if (!world) return null;
-
-  const handleCreateContinent = () => {
-    const name = prompt('大陆名称:');
-    if (name) {
-      createContinent({
-        name,
-        description: '',
-        bounds: { points: [] },
-        climate: '',
-      });
-    }
-  };
-
-  const handleCreateRegion = () => {
-    const name = prompt('区域名称:');
-    if (name && continents.length > 0) {
-      createRegion({
-        continentId: continents[0].id,
-        name,
-        description: '',
-        bounds: { points: [] },
-        terrain: 'plains',
-        resources: [],
-      });
-    }
-  };
-
-  const handleCreateLocation = () => {
-    const name = prompt('地点名称:');
-    if (name && regions.length > 0) {
-      createLocation({
-        regionId: regions[0].id,
-        name,
-        aliases: [],
-        type: 'city',
-        position: { x: 200, y: 200 },
-        description: '',
-        notableSites: [],
-        resources: [],
-      });
-    }
-  };
-
-  const handleCreateFaction = () => {
-    const name = prompt('势力名称:');
-    if (name) {
-      createFaction({
-        name,
-        type: 'nation',
-        controlledRegions: [],
-        economyLevel: 5,
-        description: '',
-      });
-    }
-  };
-
-  const handleCreateEvent = () => {
-    const name = prompt('事件名称:');
-    if (name) {
-      createEvent({
-        name,
-        type: 'other',
-        ageId: '',
-        startDate: { year: 0, displayString: '元年' },
-        description: '',
-        participants: [],
-        causes: [],
-        effects: [],
-      });
-    }
-  };
-
-  const handleCreateCharacter = () => {
-    const name = prompt('人物姓名:');
-    if (name) {
-      createCharacter({
-        name,
-        titles: [],
-        description: '',
-        relationships: [],
-        events: [],
-      });
-    }
-  };
 
   return (
     <aside className="sidebar" style={style}>
@@ -166,7 +71,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
           count={continents.length}
           collapsed={!!collapsedSections.continents}
           onToggle={() => toggleSection('continents')}
-          onAdd={handleCreateContinent}
         >
           {continents.map((c) => {
             const continentRegions = regions.filter(r => r.continentId === c.id);
@@ -226,7 +130,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
           count={locations.length}
           collapsed={!!collapsedSections.locations}
           onToggle={() => toggleSection('locations')}
-          onAdd={handleCreateLocation}
         >
           {locations.map((l) => (
             <div
@@ -246,7 +149,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
           count={factions.length}
           collapsed={!!collapsedSections.factions}
           onToggle={() => toggleSection('factions')}
-          onAdd={handleCreateFaction}
         >
           {factions.map((f) => (
             <div
@@ -266,7 +168,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
           count={events.length}
           collapsed={!!collapsedSections.events}
           onToggle={() => toggleSection('events')}
-          onAdd={handleCreateEvent}
         >
           {events.map((e) => (
             <div
@@ -286,7 +187,6 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
           count={characters.length}
           collapsed={!!collapsedSections.characters}
           onToggle={() => toggleSection('characters')}
-          onAdd={handleCreateCharacter}
         >
           {characters.map((c) => (
             <div
