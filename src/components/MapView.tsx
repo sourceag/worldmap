@@ -5,7 +5,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWorldStore } from '../store/worldStore';
 import type { Continent, Region, Location, TerrainType } from '../types';
-
+import { CanvasColors, TerrainColors, DEFAULT_TERRAIN_COLOR, TerrainLabels, DEFAULT_TERRAIN_LABEL } from '../config/colors';
 import '../App.css';
 
 type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-location' | 'edit-polygon';
@@ -116,12 +116,12 @@ export function MapView() {
       drawPolygon(
         ctx,
         continent.bounds.points,
-        'rgba(30, 41, 59, 0.6)',
-        isContinentSelected || isTargetForRegion ? '#3b82f6' : '#475569',
+        CanvasColors.continent.fill,
+        isContinentSelected || isTargetForRegion ? CanvasColors.continent.strokeSelected : CanvasColors.continent.stroke,
         isContinentSelected || isTargetForRegion ? 3 : 2,
         continent.name,
         14,
-        '#e4e4e7'
+        CanvasColors.continent.label
       );
       // 绘制大陆半透明遮罩（绘制区域模式下，非目标大陆变暗）
       if (tool === 'draw-region' && drawing && drawing.targetContinentId && drawing.targetContinentId !== continent.id) {
@@ -131,7 +131,7 @@ export function MapView() {
           ctx.lineTo(continent.bounds.points[i].x, continent.bounds.points[i].y);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillStyle = CanvasColors.mask.nonTargetContinent;
         ctx.fill();
       }
     }
@@ -144,12 +144,12 @@ export function MapView() {
       drawPolygon(
         ctx,
         region.bounds.points,
-        getTerrainColor(region.terrain),
-        isSelected || isEditing ? '#e94560' : belongsToTargetContinent ? '#60a5fa' : '#334155',
+        TerrainColors[region.terrain] || DEFAULT_TERRAIN_COLOR,
+        isSelected || isEditing ? CanvasColors.region.strokeSelected : belongsToTargetContinent ? CanvasColors.region.strokeBelongsToTarget : CanvasColors.region.stroke,
         isSelected || isEditing ? 2 : belongsToTargetContinent ? 2 : 1,
         region.name,
         12,
-        '#cbd5e1'
+        CanvasColors.region.label
       );
 
       // Draw vertex handles when editing
@@ -157,9 +157,9 @@ export function MapView() {
         for (const point of region.bounds.points) {
           ctx.beginPath();
           ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
-          ctx.fillStyle = '#e94560';
+          ctx.fillStyle = CanvasColors.edit.vertexHandle;
           ctx.fill();
-          ctx.strokeStyle = '#fff';
+          ctx.strokeStyle = CanvasColors.edit.vertexHandleStroke;
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -173,13 +173,13 @@ export function MapView() {
 
       ctx.beginPath();
       ctx.arc(x, y, isSelected ? 8 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#e94560' : '#3b82f6';
+      ctx.fillStyle = isSelected ? CanvasColors.location.fillSelected : CanvasColors.location.fill;
       ctx.fill();
-      ctx.strokeStyle = '#1e293b';
+      ctx.strokeStyle = CanvasColors.location.stroke;
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.fillStyle = '#e4e4e7';
+      ctx.fillStyle = CanvasColors.location.label;
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(location.name, x, y - 12);
@@ -196,7 +196,7 @@ export function MapView() {
         for (let i = 1; i < allPoints.length; i++) {
           ctx.lineTo(allPoints[i].x, allPoints[i].y);
         }
-        ctx.strokeStyle = '#e94560';
+        ctx.strokeStyle = CanvasColors.drawing.line;
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.stroke();
@@ -208,7 +208,7 @@ export function MapView() {
         const point = drawing.points[i];
         ctx.beginPath();
         ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
-        ctx.fillStyle = i === 0 && drawing.points.length >= 3 ? '#10b981' : '#e94560';
+        ctx.fillStyle = i === 0 && drawing.points.length >= 3 ? CanvasColors.drawing.firstVertex : CanvasColors.drawing.vertex;
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -224,7 +224,7 @@ export function MapView() {
         if (dist < 15) {
           ctx.beginPath();
           ctx.arc(firstPoint.x, firstPoint.y, 10, 0, Math.PI * 2);
-          ctx.strokeStyle = '#10b981';
+          ctx.strokeStyle = CanvasColors.drawing.closeHint;
           ctx.lineWidth = 3;
           ctx.stroke();
         }
@@ -734,7 +734,7 @@ export function MapView() {
 //绘制网格
 function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, viewport: { x: number; y: number; zoom: number }) {
   const gridSize = 50;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+  ctx.strokeStyle = CanvasColors.grid.line;
   ctx.lineWidth = 1;
 
   const startX = Math.floor(-viewport.x / viewport.zoom / gridSize) * gridSize;
@@ -806,51 +806,11 @@ function isPointInPolygon(point: { x: number; y: number }, polygon: { x: number;
 }
 
 function getTerrainColor(terrain: string): string {
-  const colors: Record<string, string> = {
-    plains: 'rgba(101, 163, 13, 0.25)',       // 平原 - 草绿
-    mountains: 'rgba(120, 113, 108, 0.35)',   // 山脉 - 深灰
-    forest: 'rgba(22, 101, 52, 0.35)',        // 森林 - 深绿
-    desert: 'rgba(234, 179, 8, 0.3)',         // 沙漠 - 金黄
-    ocean: 'rgba(59, 130, 246, 0.35)',        // 海洋 - 蓝色
-    swamp: 'rgba(101, 163, 13, 0.3)',         // 沼泽 - 暗绿
-    tundra: 'rgba(147, 197, 253, 0.3)',       // 冻原 - 浅蓝
-    hills: 'rgba(161, 98, 7, 0.3)',           // 丘陵 - 棕色
-    jungle: 'rgba(22, 163, 74, 0.35)',        // 丛林 - 翠绿
-    wasteland: 'rgba(120, 113, 108, 0.2)',    // 荒地 - 灰褐
-    basin: 'rgba(245, 158, 11, 0.25)',        // 盆地 - 橙黄
-    plateau: 'rgba(180, 83, 9, 0.3)',         // 高原 - 赭石
-    valley: 'rgba(34, 197, 94, 0.3)',         // 山谷 - 青绿
-    canyon: 'rgba(185, 28, 28, 0.25)',        // 峡谷 - 红褐
-    coast: 'rgba(20, 184, 166, 0.3)',         // 海岸 - 青色
-    volcano: 'rgba(239, 68, 68, 0.35)',       // 火山 - 红色
-    glacier: 'rgba(186, 230, 253, 0.4)',      // 冰川 - 冰蓝
-    oasis: 'rgba(34, 211, 238, 0.4)',         // 绿洲 - 亮蓝
-  };
-  return colors[terrain] || 'rgba(100, 116, 139, 0.15)';
+  return TerrainColors[terrain] || DEFAULT_TERRAIN_COLOR;
 }
 
 function getTerrainLabel(terrain: string): string {
-  const labels: Record<string, string> = {
-    plains: '🌾 平原',
-    mountains: '⛰️ 山脉',
-    forest: '🌲 森林',
-    desert: '🏜️ 沙漠',
-    ocean: '🌊 海洋',
-    swamp: '🌿 沼泽',
-    tundra: '❄️ 冻原',
-    hills: '⛰️ 丘陵',
-    jungle: '🌴 丛林',
-    wasteland: '🪨 荒地',
-    basin: '🥣 盆地',
-    plateau: '🏔️ 高原',
-    valley: '🏞️ 山谷',
-    canyon: '🪨 峡谷',
-    coast: '🏖️ 海岸',
-    volcano: '🌋 火山',
-    glacier: '🧊 冰川',
-    oasis: '💧 绿洲',
-  };
-  return labels[terrain] || terrain;
+  return TerrainLabels[terrain] || DEFAULT_TERRAIN_LABEL;
 }
 
 function getCursor(tool: ToolMode): string {
