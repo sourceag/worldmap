@@ -20,7 +20,7 @@ export interface World {
   updatedAt: DateTime;
 }
 
-export type TerrainType = 'plains' | 'mountains' | 'forest' | 'desert' | 'ocean' | 'swamp' | 'tundra' | 'hills' | 'jungle' | 'wasteland';
+export type TerrainType = 'plains' | 'mountains' | 'forest' | 'desert' | 'ocean' | 'swamp' | 'tundra' | 'hills' | 'jungle' | 'wasteland' | 'basin' | 'plateau' | 'valley' | 'canyon' | 'coast' | 'volcano' | 'glacier' | 'oasis';
 
 export interface Continent {
   id: ID;

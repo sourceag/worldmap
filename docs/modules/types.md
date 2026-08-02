@@ -106,7 +106,9 @@ interface Route {
 
 ```typescript
 type TerrainType = 'plains' | 'mountains' | 'forest' | 'desert' | 'ocean' 
-                 | 'swamp' | 'tundra' | 'hills' | 'jungle' | 'wasteland';
+                 | 'swamp' | 'tundra' | 'hills' | 'jungle' | 'wasteland'
+                 | 'basin' | 'plateau' | 'valley' | 'canyon' | 'coast'
+                 | 'volcano' | 'glacier' | 'oasis';
 
 type LocationType = 'city' | 'town' | 'village' | 'fortress' | 'ruins' 
                   | 'landmark' | 'port' | 'temple' | 'dungeon' | 'capital' | 'other';

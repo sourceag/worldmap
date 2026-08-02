@@ -171,16 +171,24 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
                 value={region.terrain}
                 onChange={(e) => updateRegion(region.id, { terrain: e.target.value as any })}
               >
-                <option value="plains">平原</option>
-                <option value="mountains">山脉</option>
-                <option value="forest">森林</option>
-                <option value="desert">沙漠</option>
-                <option value="ocean">海洋</option>
-                <option value="swamp">沼泽</option>
-                <option value="tundra">冻原</option>
-                <option value="hills">丘陵</option>
-                <option value="jungle">丛林</option>
-                <option value="wasteland">荒地</option>
+                <option value="plains">🌾 平原</option>
+                <option value="mountains">⛰️ 山脉</option>
+                <option value="forest">🌲 森林</option>
+                <option value="desert">🏜️ 沙漠</option>
+                <option value="ocean">🌊 海洋</option>
+                <option value="swamp">🌿 沼泽</option>
+                <option value="tundra">❄️ 冻原</option>
+                <option value="hills">⛰️ 丘陵</option>
+                <option value="jungle">🌴 丛林</option>
+                <option value="wasteland">🪨 荒地</option>
+                <option value="basin">🥣 盆地</option>
+                <option value="plateau">🏔️ 高原</option>
+                <option value="valley">🏞️ 山谷</option>
+                <option value="canyon">🪨 峡谷</option>
+                <option value="coast">🏖️ 海岸</option>
+                <option value="volcano">🌋 火山</option>
+                <option value="glacier">🧊 冰川</option>
+                <option value="oasis">💧 绿洲</option>
               </select>
             </div>
             <div className="form-group">

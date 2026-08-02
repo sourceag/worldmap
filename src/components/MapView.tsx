@@ -684,16 +684,24 @@ export function MapView() {
                   value={dialogData.terrain}
                   onChange={(e) => setDialogData({ ...dialogData, terrain: e.target.value as TerrainType })}
                 >
-                  <option value="plains">平原</option>
-                  <option value="mountains">山脉</option>
-                  <option value="forest">森林</option>
-                  <option value="desert">沙漠</option>
-                  <option value="ocean">海洋</option>
-                  <option value="swamp">沼泽</option>
-                  <option value="tundra">冻原</option>
-                  <option value="hills">丘陵</option>
-                  <option value="jungle">丛林</option>
-                  <option value="wasteland">荒地</option>
+                  <option value="plains">🌾 平原</option>
+                  <option value="mountains">⛰️ 山脉</option>
+                  <option value="forest">🌲 森林</option>
+                  <option value="desert">🏜️ 沙漠</option>
+                  <option value="ocean">🌊 海洋</option>
+                  <option value="swamp">🌿 沼泽</option>
+                  <option value="tundra">❄️ 冻原</option>
+                  <option value="hills">⛰️ 丘陵</option>
+                  <option value="jungle">🌴 丛林</option>
+                  <option value="wasteland">🪨 荒地</option>
+                  <option value="basin">🥣 盆地</option>
+                  <option value="plateau">🏔️ 高原</option>
+                  <option value="valley">🏞️ 山谷</option>
+                  <option value="canyon">🪨 峡谷</option>
+                  <option value="coast">🏖️ 海岸</option>
+                  <option value="volcano">🌋 火山</option>
+                  <option value="glacier">🧊 冰川</option>
+                  <option value="oasis">💧 绿洲</option>
                 </select>
               </div>
             )}
@@ -719,7 +727,7 @@ export function MapView() {
 // ============================================
 // Helper functions
 // ============================================
-
+//绘制网格
 function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, viewport: { x: number; y: number; zoom: number }) {
   const gridSize = 50;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
@@ -741,7 +749,7 @@ function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, 
   }
   ctx.stroke();
 }
-
+//绘制多边形
 function drawPolygon(
   ctx: CanvasRenderingContext2D,
   points: { x: number; y: number }[],
@@ -795,18 +803,50 @@ function isPointInPolygon(point: { x: number; y: number }, polygon: { x: number;
 
 function getTerrainColor(terrain: string): string {
   const colors: Record<string, string> = {
-    plains: 'rgba(34, 197, 94, 0.15)',
-    mountains: 'rgba(120, 113, 108, 0.2)',
-    forest: 'rgba(22, 163, 74, 0.2)',
-    desert: 'rgba(234, 179, 8, 0.15)',
-    ocean: 'rgba(59, 130, 246, 0.2)',
-    swamp: 'rgba(101, 163, 13, 0.15)',
-    tundra: 'rgba(147, 197, 253, 0.15)',
-    hills: 'rgba(161, 98, 7, 0.15)',
-    jungle: 'rgba(22, 101, 52, 0.2)',
-    wasteland: 'rgba(120, 113, 108, 0.1)',
+    plains: 'rgba(101, 163, 13, 0.25)',       // 平原 - 草绿
+    mountains: 'rgba(120, 113, 108, 0.35)',   // 山脉 - 深灰
+    forest: 'rgba(22, 101, 52, 0.35)',        // 森林 - 深绿
+    desert: 'rgba(234, 179, 8, 0.3)',         // 沙漠 - 金黄
+    ocean: 'rgba(59, 130, 246, 0.35)',        // 海洋 - 蓝色
+    swamp: 'rgba(101, 163, 13, 0.3)',         // 沼泽 - 暗绿
+    tundra: 'rgba(147, 197, 253, 0.3)',       // 冻原 - 浅蓝
+    hills: 'rgba(161, 98, 7, 0.3)',           // 丘陵 - 棕色
+    jungle: 'rgba(22, 163, 74, 0.35)',        // 丛林 - 翠绿
+    wasteland: 'rgba(120, 113, 108, 0.2)',    // 荒地 - 灰褐
+    basin: 'rgba(245, 158, 11, 0.25)',        // 盆地 - 橙黄
+    plateau: 'rgba(180, 83, 9, 0.3)',         // 高原 - 赭石
+    valley: 'rgba(34, 197, 94, 0.3)',         // 山谷 - 青绿
+    canyon: 'rgba(185, 28, 28, 0.25)',        // 峡谷 - 红褐
+    coast: 'rgba(20, 184, 166, 0.3)',         // 海岸 - 青色
+    volcano: 'rgba(239, 68, 68, 0.35)',       // 火山 - 红色
+    glacier: 'rgba(186, 230, 253, 0.4)',      // 冰川 - 冰蓝
+    oasis: 'rgba(34, 211, 238, 0.4)',         // 绿洲 - 亮蓝
   };
-  return colors[terrain] || 'rgba(100, 116, 139, 0.1)';
+  return colors[terrain] || 'rgba(100, 116, 139, 0.15)';
+}
+
+function getTerrainLabel(terrain: string): string {
+  const labels: Record<string, string> = {
+    plains: '🌾 平原',
+    mountains: '⛰️ 山脉',
+    forest: '🌲 森林',
+    desert: '🏜️ 沙漠',
+    ocean: '🌊 海洋',
+    swamp: '🌿 沼泽',
+    tundra: '❄️ 冻原',
+    hills: '⛰️ 丘陵',
+    jungle: '🌴 丛林',
+    wasteland: '🪨 荒地',
+    basin: '🥣 盆地',
+    plateau: '🏔️ 高原',
+    valley: '🏞️ 山谷',
+    canyon: '🪨 峡谷',
+    coast: '🏖️ 海岸',
+    volcano: '🌋 火山',
+    glacier: '🧊 冰川',
+    oasis: '💧 绿洲',
+  };
+  return labels[terrain] || terrain;
 }
 
 function getCursor(tool: ToolMode): string {
