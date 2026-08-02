@@ -2,10 +2,14 @@
 // PropertiesPanel 属性面板
 // ============================================
 
+import { useState } from 'react';
 import { useWorldStore } from '../store/worldStore';
 import '../App.css';
 
 export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
+  const [newEventName, setNewEventName] = useState('');
+  const [newEventYear, setNewEventYear] = useState('0');
+  const [showEventForm, setShowEventForm] = useState(false);
   const {
     selectedEntityType,
     selectedEntityId,
@@ -210,27 +214,67 @@ export function PropertiesPanel({ style }: { style?: React.CSSProperties }) {
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '2px 10px', fontSize: '12px' }}
-                  onClick={() => {
-                    const name = prompt('事件名称:');
-                    if (name) {
-                      const yearStr = prompt('发生年份:', '0');
-                      const year = parseInt(yearStr || '0') || 0;
-                      createEvent({
-                        name,
-                        type: 'other',
-                        regionIds: [region.id],
-                        startDate: { year, displayString: `${year}年` },
-                        description: '',
-                        participants: [],
-                        causes: [],
-                        effects: [],
-                      });
-                    }
-                  }}
+                  onClick={() => setShowEventForm(true)}
                 >
                   + 添加事件
                 </button>
               </div>
+              {showEventForm && (
+                <div style={{ padding: '10px', backgroundColor: 'var(--color-bg-primary)', borderRadius: '6px', marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '6px' }}>
+                    <input
+                      className="form-input"
+                      placeholder="事件名称"
+                      value={newEventName}
+                      onChange={(e) => setNewEventName(e.target.value)}
+                      style={{ fontSize: '12px', padding: '4px 8px' }}
+                      autoFocus
+                    />
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <input
+                      className="form-input"
+                      type="number"
+                      placeholder="年份"
+                      value={newEventYear}
+                      onChange={(e) => setNewEventYear(e.target.value)}
+                      style={{ fontSize: '12px', padding: '4px 8px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: '4px 12px', fontSize: '12px' }}
+                      disabled={!newEventName.trim()}
+                      onClick={() => {
+                        const year = parseInt(newEventYear) || 0;
+                        createEvent({
+                          name: newEventName.trim(),
+                          type: 'other',
+                          regionIds: [region.id],
+                          startDate: { year, displayString: `${year}年` },
+                          description: '',
+                          participants: [],
+                          causes: [],
+                          effects: [],
+                        });
+                        setNewEventName('');
+                        setNewEventYear('0');
+                        setShowEventForm(false);
+                      }}
+                    >
+                      确定
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 12px', fontSize: '12px' }}
+                      onClick={() => { setShowEventForm(false); setNewEventName(''); setNewEventYear('0'); }}
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
               {regionEvents.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {regionEvents.sort((a, b) => a.startDate.year - b.startDate.year).map((event) => (
