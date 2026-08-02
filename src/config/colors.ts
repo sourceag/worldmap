@@ -6,9 +6,9 @@
 
 export const Theme = {
   // 背景色（三层深度）
-  bgPrimary: '#1a1a2e',
-  bgSecondary: '#16213e',
-  bgTertiary: '#0f3460',
+  bgPrimary: '#6f1898',
+  bgSecondary: '#5b063d',
+  bgTertiary: '#aa0d85',
 
   // 文字色
   textPrimary: '#e4e4e7',
@@ -81,6 +81,9 @@ export const CanvasColors = {
   grid: {
     line: 'rgba(255, 255, 255, 0.03)',
   },
+
+  // 画布背景
+  canvasBackground: '#16213e',
 } as const;
 
 // === 地形颜色 ===

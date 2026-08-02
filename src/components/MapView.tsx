@@ -5,7 +5,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWorldStore } from '../store/worldStore';
 import type { Continent, Region, Location, TerrainType } from '../types';
-import { CanvasColors, TerrainColors, DEFAULT_TERRAIN_COLOR, TerrainLabels, DEFAULT_TERRAIN_LABEL } from '../config/colors';
+import { CanvasColors, TerrainColors, DEFAULT_TERRAIN_COLOR, TerrainLabels, DEFAULT_TERRAIN_LABEL, Theme } from '../config/colors';
 import '../App.css';
 
 type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-location' | 'edit-polygon';
@@ -54,7 +54,7 @@ export function MapView() {
   const [dialogData, setDialogData] = useState({ name: '', description: '', terrain: 'plains' as TerrainType });
 
   const [zoomSpeed, setZoomSpeed] = useState<number>(0.005); // 缩放速度：0.001(慢) ~ 0.02(快)
-  const [canvasBgColor, setCanvasBgColor] = useState('#16213e'); // 画布背景色
+  const [canvasBgColor, setCanvasBgColor] = useState<string>(CanvasColors.canvasBackground);
 
   // Convert screen coordinates to world coordinates
   const screenToWorld = useCallback((clientX: number, clientY: number) => {
