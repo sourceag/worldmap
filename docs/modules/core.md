@@ -270,6 +270,9 @@ isPolygonInsidePolygon(
   inner: { x: number; y: number }[],
   outer: { x: number; y: number }[]
 ): boolean
+
+// 计算多边形面积（用于区域选择器显示）
+polygonArea(polygon: { x: number; y: number }[]): number
 ```
 
 **使用时机**: 创建区域时，如果区域超出大陆边界，自动裁剪。

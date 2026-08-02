@@ -5,6 +5,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWorldStore } from '../store/worldStore';
 import type { Continent, Region, Location, TerrainType } from '../types';
+import { polygonArea } from '../core/PolygonClip';
 import '../App.css';
 
 type ToolMode = 'select' | 'pan' | 'draw-continent' | 'draw-region' | 'add-location' | 'edit-polygon';
@@ -53,6 +54,8 @@ export function MapView() {
   const [polygonEdit, setPolygonEdit] = useState<PolygonEditState | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [dialogData, setDialogData] = useState({ name: '', description: '', terrain: 'plains' as TerrainType });
+  const [showRegionPicker, setShowRegionPicker] = useState(false);
+  const [regionPickerOptions, setRegionPickerOptions] = useState<{ x: number; y: number }[][]>([]);
   const [zoomSpeed, setZoomSpeed] = useState<number>(0.005); // 缩放速度：0.001(慢) ~ 0.02(快)
   const [canvasBgColor, setCanvasBgColor] = useState('#16213e'); // 画布背景色
 
@@ -507,26 +510,62 @@ export function MapView() {
       return;
     }
 
-    // 获取边界线段（从起点到终点沿边界正向）
-    const boundarySegment = getBoundarySegment(
+    // 计算两个可能的边界线段（正向和反向）
+    const forwardSegment = getBoundarySegment(
       boundaryPoints,
       { edgeIndex: startProjection.edgeIndex, t: startProjection.t },
       { edgeIndex: endProjection.edgeIndex, t: endProjection.t }
     );
+    const reverseSegment = getBoundarySegment(
+      boundaryPoints,
+      { edgeIndex: endProjection.edgeIndex, t: endProjection.t },
+      { edgeIndex: startProjection.edgeIndex, t: startProjection.t }
+    );
 
-    // 组合多边形：绘制的点 + 边界线段（去掉首尾重复点）
-    const combinedPoints = [
+    // 组合两个可能的多边形
+    const polygonA = [
       ...drawingState.points,
-      ...boundarySegment.slice(1, -1), // 去掉首尾（与绘制点重复）
+      ...forwardSegment.slice(1, -1),
+    ];
+    const polygonB = [
+      ...drawingState.points,
+      ...reverseSegment.slice(1, -1),
     ];
 
-    if (combinedPoints.length >= 3) {
-      // 临时设置组合点为 drawing.points 后打开对话框
-      setDrawing({ ...drawingState, points: combinedPoints });
+    // 验证两个多边形是否都有效
+    const validA = polygonA.length >= 3;
+    const validB = polygonB.length >= 3;
+
+    if (validA && validB) {
+      // 两个都有效，弹出选择框让用户选择
+      setRegionPickerOptions([polygonA, polygonB]);
+      setShowRegionPicker(true);
+    } else if (validA) {
+      setDrawing({ ...drawingState, points: polygonA });
+      setShowDialog(true);
+    } else if (validB) {
+      setDrawing({ ...drawingState, points: polygonB });
       setShowDialog(true);
     } else {
       handleClosePolygon();
     }
+  };
+
+  // 区域选择器确认
+  const handleRegionPickerSelect = (index: number) => {
+    if (index >= 0 && index < regionPickerOptions.length) {
+      setDrawing(prev => prev ? { ...prev, points: regionPickerOptions[index] } : null);
+      setShowDialog(true);
+    }
+    setShowRegionPicker(false);
+    setRegionPickerOptions([]);
+  };
+
+  // 区域选择器取消
+  const handleRegionPickerCancel = () => {
+    setShowRegionPicker(false);
+    setRegionPickerOptions([]);
+    setDrawing(null);
   };
 
   const handleDialogSubmit = () => {
@@ -790,6 +829,62 @@ export function MapView() {
                 disabled={!dialogData.name.trim()}
               >
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Region Picker - 当折线分割大陆时让用户选择区域 */}
+      {showRegionPicker && regionPickerOptions.length >= 2 && (
+        <div className="map-dialog-overlay">
+          <div className="map-dialog">
+            <h3>🎯 选择区域</h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+              折线将边界分为两部分，请选择要创建的区域：
+            </p>
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+              {regionPickerOptions.map((polygon, index) => {
+                const center = getCenter(polygon);
+                const area = Math.round(polygonArea(polygon));
+                return (
+                  <button
+                    key={index}
+                    className="region-picker-option"
+                    onClick={() => handleRegionPickerSelect(index)}
+                    style={{
+                      flex: 1,
+                      padding: '16px',
+                      backgroundColor: 'var(--color-bg-primary)',
+                      border: '2px solid var(--color-border)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-accent)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-border)';
+                    }}
+                  >
+                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>
+                      {index === 0 ? '◀' : '▶'}
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '4px' }}>
+                      区域 {index === 0 ? 'A' : 'B'}
+                    </div>
+                    <div style={{ fontSize: '11px', opacity: 0.6 }}>
+                      {area} 平方像素
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="map-dialog-actions">
+              <button className="btn btn-secondary" onClick={handleRegionPickerCancel}>
+                取消
               </button>
             </div>
           </div>

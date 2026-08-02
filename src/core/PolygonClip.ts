@@ -120,3 +120,16 @@ function isPointInPolygon(
   }
   return inside;
 }
+
+/**
+ * 计算多边形面积（用于区域选择器显示）
+ */
+export function polygonArea(polygon: { x: number; y: number }[]): number {
+  let area = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length;
+    area += polygon[i].x * polygon[j].y;
+    area -= polygon[j].x * polygon[i].y;
+  }
+  return Math.abs(area) / 2;
+}
