@@ -20,6 +20,7 @@ import { generateId } from '../utils/id';
 import { worldForgeAPI } from '../core/WorldForgeAPI';
 import { saveWorldData, loadWorldData } from '../core/Storage';
 import { historyManager, createSnapshot, restoreSnapshot, type ActionType } from '../core/History';
+import { clipPolygonToPolygon } from '../core/PolygonClip';
 
 interface WorldState {
   // 数据
@@ -159,6 +160,7 @@ export const useWorldStore = create<WorldState>((set, get) => ({
       ...data,
       id: generateId(),
       worldId: world.id,
+      regionIds: [],  // 初始化空区域列表
       createdAt: new Date().toISOString(),
     };
     set((state) => ({ continents: [...state.continents, continent] }));
@@ -189,12 +191,39 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   // === Region ===
   createRegion: (data) => {
     const before = createSnapshot(get());
+    
+    // 如果指定了大陆，裁剪区域多边形到大陆边界内
+    let bounds = data.bounds;
+    if (data.continentId) {
+      const continent = get().continents.find(c => c.id === data.continentId);
+      if (continent && continent.bounds.points.length >= 3 && data.bounds.points.length >= 3) {
+        const clipped = clipPolygonToPolygon(data.bounds.points, continent.bounds.points);
+        if (clipped.length >= 3) {
+          bounds = { points: clipped };
+        }
+      }
+    }
+    
     const region: Region = {
       ...data,
+      bounds,
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
+    
     set((state) => ({ regions: [...state.regions, region] }));
+    
+    // 更新大陆的 regionIds 列表
+    if (region.continentId) {
+      set((state) => ({
+        continents: state.continents.map(c => 
+          c.id === region.continentId 
+            ? { ...c, regionIds: [...(c.regionIds || []), region.id] }
+            : c
+        ),
+      }));
+    }
+    
     get()._pushHistory('create-region', `创建区域"${region.name}"`, before);
     worldForgeAPI.emitEntityEvent('entity:created', 'region', region.id, region);
     return region;
@@ -214,7 +243,21 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   deleteRegion: (id) => {
     const before = createSnapshot(get());
     const entityName = (get().regions.find(r => r.id === id) as Region)?.name || '(未知)';
+    const region = get().regions.find(r => r.id === id);
+    
     set((state) => ({ regions: state.regions.filter((r) => r.id !== id) }));
+    
+    // 从大陆的 regionIds 列表中移除
+    if (region?.continentId) {
+      set((state) => ({
+        continents: state.continents.map(c =>
+          c.id === region.continentId
+            ? { ...c, regionIds: (c.regionIds || []).filter(rid => rid !== id) }
+            : c
+        ),
+      }));
+    }
+    
     get()._pushHistory('delete-region', `删除区域"${entityName}"`, before);
     worldForgeAPI.emitEntityEvent('entity:deleted', 'region', id, null);
   },

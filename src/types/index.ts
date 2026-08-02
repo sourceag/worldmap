@@ -30,6 +30,7 @@ export interface Continent {
   bounds: {
     points: { x: number; y: number }[];
   };
+  regionIds?: ID[];       // 包含的区域 ID 列表（Store 自动维护）
   climate?: string;
   createdAt: DateTime;
 }

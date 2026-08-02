@@ -115,41 +115,62 @@ export function Sidebar({ style }: { style?: React.CSSProperties }) {
     <aside className="sidebar" style={style}>
       <div className="sidebar-header">世界结构</div>
       <div className="sidebar-content">
-        {/* Continents */}
+        {/* Continents & Regions (嵌套显示) */}
         <div className="sidebar-section">
           <div className="sidebar-section-title">
             <span>大陆 ({continents.length})</span>
             <button onClick={handleCreateContinent} title="添加大陆">+</button>
           </div>
-          {continents.map((c) => (
-            <div
-              key={c.id}
-              className={`sidebar-item ${selectedEntityType === 'continent' && selectedEntityId === c.id ? 'selected' : ''}`}
-              onClick={() => selectEntity('continent', c.id)}
-            >
-              <span className="sidebar-item-icon">🌍</span>
-              {c.name}
-            </div>
-          ))}
+          {continents.map((c) => {
+            const continentRegions = regions.filter(r => r.continentId === c.id);
+            return (
+              <div key={c.id}>
+                <div
+                  className={`sidebar-item ${selectedEntityType === 'continent' && selectedEntityId === c.id ? 'selected' : ''}`}
+                  onClick={() => selectEntity('continent', c.id)}
+                >
+                  <span className="sidebar-item-icon">🌍</span>
+                  {c.name}
+                  {continentRegions.length > 0 && (
+                    <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.5 }}>
+                      {continentRegions.length}
+                    </span>
+                  )}
+                </div>
+                {/* 嵌套显示该大陆下的区域 */}
+                {continentRegions.map((r) => (
+                  <div
+                    key={r.id}
+                    className={`sidebar-item sidebar-item-nested ${selectedEntityType === 'region' && selectedEntityId === r.id ? 'selected' : ''}`}
+                    onClick={() => selectEntity('region', r.id)}
+                  >
+                    <span className="sidebar-item-icon">🏔️</span>
+                    {r.name}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
 
-        {/* Regions */}
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">
-            <span>区域 ({regions.length})</span>
-            <button onClick={handleCreateRegion} title="添加区域">+</button>
-          </div>
-          {regions.map((r) => (
-            <div
-              key={r.id}
-              className={`sidebar-item ${selectedEntityType === 'region' && selectedEntityId === r.id ? 'selected' : ''}`}
-              onClick={() => selectEntity('region', r.id)}
-            >
-              <span className="sidebar-item-icon">🏔️</span>
-              {r.name}
+        {/* 未分配大陆的区域 */}
+        {regions.filter(r => !r.continentId || !continents.find(c => c.id === r.continentId)).length > 0 && (
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">
+              <span>未分配区域</span>
             </div>
-          ))}
-        </div>
+            {regions.filter(r => !r.continentId || !continents.find(c => c.id === r.continentId)).map((r) => (
+              <div
+                key={r.id}
+                className={`sidebar-item ${selectedEntityType === 'region' && selectedEntityId === r.id ? 'selected' : ''}`}
+                onClick={() => selectEntity('region', r.id)}
+              >
+                <span className="sidebar-item-icon">🏔️</span>
+                {r.name}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Locations */}
         <div className="sidebar-section">

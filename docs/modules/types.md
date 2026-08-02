@@ -44,6 +44,7 @@ interface Continent {
   bounds: {
     points: { x: number; y: number }[];  // 多边形顶点
   };
+  regionIds?: ID[];       // 包含的区域 ID 列表（Store 自动维护）
   climate?: string;       // 气候类型
   createdAt: DateTime;
 }

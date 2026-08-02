@@ -178,8 +178,6 @@ getStorageSize(): Promise<string>
 
 ## WFFile.ts — WorldForge 文件格式
 
-**文件**: `src/core/WFFile.ts` (130 行)
-
 定义 `.wf.json` 文件格式用于结构化导入导出。
 
 ```typescript
@@ -251,3 +249,27 @@ class WorldForgeAPIImpl implements WorldForgeAPI {
 
 export const worldForgeAPI: WorldForgeAPIImpl;  // 单例
 ```
+
+---
+
+## PolygonClip.ts — 多边形裁剪
+
+**文件**: `src/core/PolygonClip.ts` (110 行)
+
+基于 Sutherland-Hodgman 算法的多边形裁剪工具，确保区域多边形完全位于大陆边界内。
+
+```typescript
+// 将区域多边形裁剪到大陆边界内
+clipPolygonToPolygon(
+  subject: { x: number; y: number }[],  // 被裁剪多边形（区域）
+  clip: { x: number; y: number }[]       // 裁剪边界（大陆）
+): { x: number; y: number }[]
+
+// 检查多边形是否完全在另一个多边形内
+isPolygonInsidePolygon(
+  inner: { x: number; y: number }[],
+  outer: { x: number; y: number }[]
+): boolean
+```
+
+**使用时机**: 创建区域时，如果区域超出大陆边界，自动裁剪。

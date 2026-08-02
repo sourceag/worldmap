@@ -184,6 +184,17 @@
   color: var(--color-accent);
 }
 
+/* 嵌套显示的区域项 */
+.sidebar-item-nested {
+  padding-left: 32px !important;
+  font-size: 12px !important;
+  opacity: 0.85;
+}
+
+.sidebar-item-nested .sidebar-item-icon {
+  font-size: 12px !important;
+}
+
 .sidebar-item-icon {
   width: 16px;
   height: 16px;
